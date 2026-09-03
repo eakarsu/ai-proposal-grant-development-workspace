@@ -335,6 +335,7 @@ interface AiResult {
   recommendations: string[];
   riskLevel: "low" | "medium" | "high";
   model: string;
+  contextRows?: number;
 }
 
 // One-click presets that fill AI input fields. Generic across all 19 apps:
@@ -523,7 +524,7 @@ function WorkflowBlock({ slug }: { slug: string }) {
               <div>
                 <p className="text-sm font-bold text-white">Analysis report — {config.title}</p>
                 <p className="text-xs text-slate-300">
-                  {[ranAt, result.model].filter(Boolean).join("  •  ")}
+                  {[ranAt, result.model, typeof result.contextRows === "number" ? `${result.contextRows.toLocaleString()} rows analyzed` : ""].filter(Boolean).join("  •  ")}
                 </p>
               </div>
               <Badge className={riskBadge}>{result.riskLevel.toUpperCase()} RISK</Badge>
