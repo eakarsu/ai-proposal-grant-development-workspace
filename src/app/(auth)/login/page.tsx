@@ -1,0 +1,102 @@
+"use client";
+
+import { signIn } from "next-auth/react";
+import { useRouter } from "next/navigation";
+import { useState } from "react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+
+export default function LoginPage() {
+  const router = useRouter();
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
+  const [pending, setPending] = useState(false);
+
+  function fillDemo() {
+    setEmail("admin@ai-proposal-grant-development-workspace.local");
+    setPassword("Demo!23456");
+    setError("");
+  }
+
+  async function onSubmit(event: React.FormEvent) {
+    event.preventDefault();
+    setPending(true);
+    setError("");
+    const result = await signIn("credentials", {
+      redirect: false,
+      email,
+      password,
+    });
+    setPending(false);
+    if (result?.error) {
+      setError("Invalid email or password.");
+      return;
+    }
+    router.push("/dashboard");
+    router.refresh();
+  }
+
+  return (
+    <div className="flex min-h-screen items-center justify-center bg-slate-100 p-6">
+      <div className="w-full max-w-md">
+        <div className="mb-8 text-center">
+          <h1 className="text-3xl font-bold tracking-tight text-slate-900">
+            Proposal & Grant Development Workspace
+          </h1>
+          <p className="mt-2 text-sm text-slate-600">From source documents to validated submission packages</p>
+        </div>
+        <form
+          onSubmit={onSubmit}
+          className="rounded-xl border border-slate-200 bg-white p-8 shadow-sm"
+        >
+          <h2 className="text-lg font-semibold text-slate-900">Sign in</h2>
+          <p className="mt-1 text-sm text-slate-500">
+            Access the provisioned demonstration workspace.
+          </p>
+          <div className="mt-6 space-y-4">
+            <div>
+              <Label htmlFor="email">Email</Label>
+              <Input
+                id="email"
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                required
+                autoComplete="email"
+              />
+            </div>
+            <div>
+              <Label htmlFor="password">Password</Label>
+              <Input
+                id="password"
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                required
+                autoComplete="current-password"
+              />
+            </div>
+            {error ? (
+              <p className="rounded-md bg-red-50 p-3 text-sm text-red-700">
+                {error}
+              </p>
+            ) : null}
+            <Button type="submit" className="w-full" disabled={pending}>
+              {pending ? "Signing in..." : "Sign in securely"}
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              className="w-full"
+              onClick={fillDemo}
+            >
+              Auto Fill Demo Credentials
+            </Button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}

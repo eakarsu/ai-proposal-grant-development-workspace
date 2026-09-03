@@ -1,0 +1,213 @@
+// Generated schema — modeled after beautyhqio conventions.
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  name         String
+  passwordHash String
+  role         Role     @default(ANALYST)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+enum Role {
+  ADMIN
+  MANAGER
+  ANALYST
+}
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  actorId   String?
+  actorName String?
+  action    String
+  entity    String
+  entityId  String?
+  detail    String?
+  createdAt DateTime @default(now())
+}
+
+model Opportunity {
+  id        String   @id @default(cuid())
+  name String
+  funder String
+  program String
+  awardCeiling Float
+  status String
+  deadline DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  proposals Proposal[]
+  requirementItems RequirementItem[]
+  sourceDocuments SourceDocument[]
+  claimValidations ClaimValidation[]
+  budgetLines BudgetLine[]
+  reviewerAssignments ReviewerAssignment[]
+  deadlineItems DeadlineItem[]
+  draftSections DraftSection[]
+  meetingExtracts MeetingExtract[]
+  submissionPackages SubmissionPackage[]
+  complianceChecks ComplianceCheck[]
+}
+
+model Proposal {
+  id        String   @id @default(cuid())
+  title String
+  opportunityRef String
+  lead String
+  requestedAmount Float
+  status String
+  dueDate DateTime?
+  opportunityId String?
+  opportunity Opportunity? @relation(fields: [opportunityId], references: [id])
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model RequirementItem {
+  id        String   @id @default(cuid())
+  section String
+  requirement String
+  responseRef String
+  status String
+  owner String
+  pageLimit String?
+  opportunityId String?
+  opportunity Opportunity? @relation(fields: [opportunityId], references: [id])
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model SourceDocument {
+  id        String   @id @default(cuid())
+  title String
+  kind String
+  storageRef String
+  approvedBy String
+  status String
+  ingestedAt DateTime?
+  opportunityId String?
+  opportunity Opportunity? @relation(fields: [opportunityId], references: [id])
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model ClaimValidation {
+  id        String   @id @default(cuid())
+  claim String
+  sourceRef String
+  verdict String
+  reviewer String
+  status String
+  checkedAt DateTime?
+  opportunityId String?
+  opportunity Opportunity? @relation(fields: [opportunityId], references: [id])
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model BudgetLine {
+  id        String   @id @default(cuid())
+  category String
+  description String
+  amount Float
+  justification String
+  status String
+  allowability String
+  opportunityId String?
+  opportunity Opportunity? @relation(fields: [opportunityId], references: [id])
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model ReviewerAssignment {
+  id        String   @id @default(cuid())
+  reviewer String
+  section String
+  expertise String
+  status String
+  dueDate DateTime?
+  feedbackRef String?
+  opportunityId String?
+  opportunity Opportunity? @relation(fields: [opportunityId], references: [id])
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model DeadlineItem {
+  id        String   @id @default(cuid())
+  kind String
+  title String
+  dueAt DateTime?
+  owner String
+  status String
+  consequence String?
+  opportunityId String?
+  opportunity Opportunity? @relation(fields: [opportunityId], references: [id])
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model DraftSection {
+  id        String   @id @default(cuid())
+  section String
+  content String
+  version String
+  author String
+  status String
+  lastEditedAt DateTime?
+  opportunityId String?
+  opportunity Opportunity? @relation(fields: [opportunityId], references: [id])
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model MeetingExtract {
+  id        String   @id @default(cuid())
+  meeting String
+  keyPoints String
+  decisions String
+  actions String
+  status String
+  heldAt DateTime?
+  opportunityId String?
+  opportunity Opportunity? @relation(fields: [opportunityId], references: [id])
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model SubmissionPackage {
+  id        String   @id @default(cuid())
+  portal String
+  packageRef String
+  status String
+  submittedAt DateTime?
+  confirmation String?
+  pageCount Int
+  opportunityId String?
+  opportunity Opportunity? @relation(fields: [opportunityId], references: [id])
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model ComplianceCheck {
+  id        String   @id @default(cuid())
+  rule String
+  result String
+  evidence String
+  reviewer String
+  status String
+  checkedAt DateTime?
+  opportunityId String?
+  opportunity Opportunity? @relation(fields: [opportunityId], references: [id])
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
