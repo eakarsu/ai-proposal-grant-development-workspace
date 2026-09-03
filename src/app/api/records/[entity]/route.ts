@@ -14,6 +14,8 @@ function delegateFor(entity: string) {
     {
       findMany: (args?: unknown) => Promise<unknown[]>;
       create: (args: { data: Record<string, unknown> }) => Promise<unknown>;
+      update: (args: { where: { id: string }; data: Record<string, unknown> }) => Promise<unknown>;
+      delete: (args: { where: { id: string } }) => Promise<unknown>;
     }
   >;
   return db[delegate] ?? null;
@@ -80,4 +82,75 @@ export async function POST(
     },
   });
   return NextResponse.json({ row }, { status: 201 });
+}
+
+export async function PUT(
+  request: NextRequest,
+  context: { params: Promise<{ entity: string }> }
+) {
+  const user = await requireUser();
+  if (!user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  const { entity } = await context.params;
+  const config = entities[entity];
+  const client = delegateFor(entity);
+  if (!config || !client) {
+    return NextResponse.json({ error: "Unknown entity" }, { status: 404 });
+  }
+  const body = (await request.json().catch(() => ({}))) as Record<string, unknown>;
+  const id = typeof body.id === "string" ? body.id : "";
+  if (!id) {
+    return NextResponse.json({ error: "Missing id" }, { status: 400 });
+  }
+  const data: Record<string, unknown> = {};
+  for (const field of config.fields) {
+    if (!(field.name in body)) continue;
+    const value = coerce(field.kind, body[field.name]);
+    if (value !== undefined) data[field.name] = value;
+  }
+  const row = await client.update({ where: { id }, data });
+  await prisma.auditLog.create({
+    data: {
+      actorName: user.name ?? user.email,
+      action: "UPDATE",
+      entity: config.name,
+      detail: `Record ${id} updated via ${config.label}`,
+    },
+  });
+  return NextResponse.json({ row });
+}
+
+export async function DELETE(
+  request: NextRequest,
+  context: { params: Promise<{ entity: string }> }
+) {
+  const user = await requireUser();
+  if (!user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  const { entity } = await context.params;
+  const config = entities[entity];
+  const client = delegateFor(entity);
+  if (!config || !client) {
+    return NextResponse.json({ error: "Unknown entity" }, { status: 404 });
+  }
+  const { searchParams } = new URL(request.url);
+  const body = (await request.json().catch(() => ({}))) as Record<string, unknown>;
+  const id =
+    searchParams.get("id") ??
+    (typeof body.id === "string" ? body.id : null);
+  if (!id) {
+    return NextResponse.json({ error: "Missing id" }, { status: 400 });
+  }
+  await client.delete({ where: { id } });
+  await prisma.auditLog.create({
+    data: {
+      actorName: user.name ?? user.email,
+      action: "DELETE",
+      entity: config.name,
+      detail: `Record ${id} deleted via ${config.label}`,
+    },
+  });
+  return NextResponse.json({ ok: true });
 }

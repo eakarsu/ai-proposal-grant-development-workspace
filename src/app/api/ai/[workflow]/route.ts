@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireUser } from "@/lib/api-auth";
 import { workflows } from "@/config/app";
-import { callOpenRouter } from "@/lib/openrouter";
+import { callOpenRouter, OPENROUTER_MODELS, DEFAULT_OPENROUTER_MODEL } from "@/lib/openrouter";
 
 export const dynamic = "force-dynamic";
 
@@ -45,8 +45,11 @@ export async function POST(
   }
   const body = (await request.json().catch(() => ({}))) as {
     input?: Record<string, string>;
+    model?: string;
   };
   const input = body.input ?? {};
+  const allowed = new Set(OPENROUTER_MODELS.map((m) => m.id));
+  const model = body.model && allowed.has(body.model) ? body.model : DEFAULT_OPENROUTER_MODEL;
 
   if (!process.env.OPENROUTER_API_KEY) {
     return NextResponse.json({ result: fallbackResult(config.title, input) });
@@ -62,13 +65,16 @@ export async function POST(
   ].join("\n");
 
   try {
-    const content = await callOpenRouter([
-      {
-        role: "system",
-        content: `${config.title} — you are a domain specialist. Be concrete, cite thresholds and numbers when relevant.`,
-      },
-      { role: "user", content: prompt },
-    ]);
+    const { content, model: usedModel } = await callOpenRouter(
+      [
+        {
+          role: "system",
+          content: `${config.title} — you are a domain specialist. Be concrete, cite thresholds and numbers when relevant.`,
+        },
+        { role: "user", content: prompt },
+      ],
+      { model }
+    );
     const match = content.match(/\{[\s\S]*\}/);
     const parsed = match ? JSON.parse(match[0]) : null;
     if (!parsed || typeof parsed.summary !== "string") {
@@ -84,7 +90,7 @@ export async function POST(
         riskLevel: ["low", "medium", "high"].includes(parsed.riskLevel)
           ? parsed.riskLevel
           : "medium",
-        model: process.env.OPENROUTER_MODEL || "openrouter",
+        model: usedModel,
       },
     });
   } catch {
