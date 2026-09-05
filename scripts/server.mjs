@@ -1,0 +1,13 @@
+import { spawn } from 'node:child_process';
+import { createRequire } from 'node:module';
+import fs from 'node:fs';
+const require = createRequire(import.meta.url);
+if (fs.existsSync('.env')) process.loadEnvFile('.env');
+const mode = process.argv[2] === 'dev' ? 'dev' : 'start';
+if (mode === 'start' && (!process.env.NEXTAUTH_SECRET || process.env.NEXTAUTH_SECRET.length < 32)) throw new Error('Configure NEXTAUTH_SECRET with at least 32 random characters');
+process.env.NODE_ENV = mode === 'start' ? 'production' : 'development';
+const port = Number(process.env.PORT || 4629);
+if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error('Invalid PORT');
+const child = spawn(process.execPath, [require.resolve('next/dist/bin/next'), mode, '-p', String(port), '-H', process.env.HOST || (mode === 'dev' ? '127.0.0.1' : '0.0.0.0')], {stdio:'inherit', env:process.env});
+for (const signal of ['SIGINT','SIGTERM']) process.on(signal, () => child.kill(signal));
+child.on('exit', code => {process.exitCode = code ?? 1;});

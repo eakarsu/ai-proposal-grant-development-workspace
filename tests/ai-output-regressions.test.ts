@@ -1,0 +1,2 @@
+import test from 'node:test';import assert from 'node:assert/strict';import {parseModelResult} from '../src/lib/ai-evidence';
+test('AI cannot report blank findings as a completed draft',()=>{const value={status:'draft',summary:'Review draft',findings:['  '],recommendations:[],citations:['Source:a'],limitations:[]};assert.throws(()=>parseModelResult(JSON.stringify(value),new Set(['Source:a'])),/invalid findings/);value.findings=['Source evidence requires reviewer confirmation'];assert.equal(parseModelResult(JSON.stringify(value),new Set(['Source:a'])).status,'draft')});

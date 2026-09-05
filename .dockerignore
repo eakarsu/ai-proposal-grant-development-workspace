@@ -2,8 +2,8 @@ node_modules
 .next
 .git
 .env
-.env.local
-*.tsbuildinfo
-.DS_Store
-coverage
-playwright-report
+.env.*
+!.env.example
+backend
+frontend
+*.log

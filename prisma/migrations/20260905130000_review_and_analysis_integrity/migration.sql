@@ -1,0 +1,11 @@
+CREATE TABLE "WorkflowAnalysis" ("id" TEXT PRIMARY KEY, "actorId" TEXT NOT NULL, "workflow" TEXT NOT NULL, "subjectEntity" TEXT NOT NULL, "subjectId" TEXT NOT NULL, "input" JSONB NOT NULL, "evidence" JSONB NOT NULL, "evidenceHash" TEXT NOT NULL, "result" JSONB NOT NULL, "model" TEXT NOT NULL, "receipt" TEXT, "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP);
+CREATE INDEX "WorkflowAnalysis_workflow_createdAt_idx" ON "WorkflowAnalysis"("workflow", "createdAt");
+CREATE TABLE "RecordReview" ("id" TEXT PRIMARY KEY, "actorId" TEXT NOT NULL, "entity" TEXT NOT NULL, "entityId" TEXT NOT NULL, "version" TEXT NOT NULL, "reason" TEXT NOT NULL, "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP);
+CREATE UNIQUE INDEX "RecordReview_entity_entityId_version_actorId_key" ON "RecordReview"("entity", "entityId", "version", "actorId");
+CREATE TABLE "UsageBucket" ("id" TEXT PRIMARY KEY, "calls" INTEGER NOT NULL);
+CREATE TABLE "IssuedCredential" ("token" TEXT PRIMARY KEY, "entity" TEXT NOT NULL, "entityId" TEXT NOT NULL, "version" TEXT NOT NULL, "assertion" JSONB NOT NULL, "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP, "revokedAt" TIMESTAMP(3));
+CREATE INDEX "IssuedCredential_entity_entityId_createdAt_idx" ON "IssuedCredential"("entity", "entityId", "createdAt");
+CREATE TABLE "DomainArtifact" ("id" TEXT PRIMARY KEY, "subjectEntity" TEXT NOT NULL, "subjectId" TEXT NOT NULL, "title" TEXT NOT NULL, "content" TEXT NOT NULL, "contentHash" TEXT NOT NULL, "actorId" TEXT NOT NULL, "approvedBy" TEXT, "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP);
+CREATE INDEX "DomainArtifact_subjectEntity_subjectId_idx" ON "DomainArtifact"("subjectEntity", "subjectId");
+CREATE TABLE "RecordApproval" ("id" TEXT PRIMARY KEY, "version" TEXT NOT NULL);
+CREATE TABLE "DomainExecution" ("id" TEXT PRIMARY KEY, "actorId" TEXT NOT NULL, "connectorId" TEXT NOT NULL, "action" TEXT NOT NULL, "subjectEntity" TEXT NOT NULL, "subjectId" TEXT NOT NULL, "version" TEXT NOT NULL, "status" TEXT NOT NULL, "result" JSONB, "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP);

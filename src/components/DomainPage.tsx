@@ -1,776 +1,151 @@
 "use client";
 
 import { useCallback, useEffect, useState, Suspense } from "react";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { Database, Plus, Sparkles } from "lucide-react";
-import { entities, pages, workflows, type PageConfig } from "@/config/app";
-import { Badge } from "@/components/ui/badge";
+import { useSearchParams } from "next/navigation";
+import { entities, pages, workflows } from "@/config/app";
+import { recordMetadata, canWrite, canDelete, type Field } from "@/lib/record-policy";
+import WorkflowExamples from "@/components/WorkflowExamples";
+import RecordImport from "@/components/RecordImport";
+import EvidenceUpload from "@/components/EvidenceUpload";
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
 import { Dialog } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import { formatDateTime, pretty } from "@/lib/utils";
+import { pretty } from "@/lib/utils";
 
-type Row = Record<string, unknown> & { id: string };
-
-function FieldInput({
-  name,
-  kind,
-  value,
-  onChange,
-}: {
-  name: string;
-  kind: string;
-  value: string;
-  onChange: (value: string) => void;
-}) {
-  if (kind === "boolean") {
-    return (
-      <input
-        type="checkbox"
-        className="h-4 w-4 rounded border-slate-300"
-        checked={value === "true"}
-        onChange={(e) => onChange(e.target.checked ? "true" : "false")}
-      />
-    );
-  }
-  const type =
-    kind === "number" ? "number" : kind === "date" ? "date" : "text";
-  return (
-    <Input
-      type={type}
-      value={value}
-      onChange={(e) => onChange(e.target.value)}
-    />
-  );
+type Row = Record<string, unknown> & { id: string; updatedAt: string };
+type Analysis = { claims?: {claim:string;sourceId:string;quote:string}[]; id: string; workflow?: string; summary: string; findings: string[]; recommendations: string[]; citations: string[]; limitations: string[]; model: string; contextRows: number };
+function exportDraft(result: Analysis) {
+  const text = [`# Proposal working draft`, `Saved analysis: ${result.id}`, `Model: ${result.model}`, result.summary,
+    '## Findings', ...result.findings.map(x=>`- ${x}`), '## Recommendations', ...result.recommendations.map(x=>`- ${x}`),
+    '## Source excerpts', ...(result.claims ?? []).map(x=>`${x.claim}\n\nSource: ${x.sourceId}\n\n> ${x.quote.replace(/\n/g,'\n> ')}`),
+    '## Evidence references', ...result.citations, '## Limitations', ...result.limitations, 'Draft only. Requires human review before submission.'].join('\n\n');
+  const url=URL.createObjectURL(new Blob([text], {type:'text/markdown;charset=utf-8'}));
+  const link=document.createElement('a'); link.href=url; link.download=`proposal-draft-${result.id.replace(/[^a-zA-Z0-9_-]/g,'')}.md`; link.click(); setTimeout(()=>URL.revokeObjectURL(url),1000);
 }
-
-function renderCell(value: unknown): string {
-  if (value === null || value === undefined) return "—";
-  if (value instanceof Date) return formatDateTime(value);
-  if (typeof value === "boolean") return value ? "Yes" : "No";
-  if (typeof value === "number") return value.toLocaleString();
-  const s = String(value);
-  return s.length > 64 ? s.slice(0, 61) + "..." : s;
+async function api(url: string, options?: RequestInit) {
+  const response = await fetch(url, options);
+  if (response.status === 401 && typeof window !== "undefined") window.location.assign("/login");
+  const data = await response.json().catch(() => null);
+  if (!response.ok || !data) throw new Error(data?.error || "The service is unavailable. Please retry.");
+  return data;
 }
+const jsonRequest = (method: string, body: unknown): RequestInit => ({ method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+const message = (error: unknown) => error instanceof Error ? error.message : "Request failed";
+function Notice({ text }: { text: string }) { return text ? <p role="alert" className="rounded border border-amber-300 bg-amber-50 p-3 text-sm">{text}</p> : null; }
+function label(row: Row) { return String(row.name ?? row.title ?? row.reference ?? row.caseId ?? row.memberRef ?? row.candidate ?? row.id); }
 
-function EntityBlock({ entityName, autoOpen }: { entityName: string; autoOpen?: boolean }) {
-  const config = entities[entityName];
+function RecordPicker({ entity, value, onChange }: { entity: string; value: string; onChange: (id: string) => void }) {
+  const [query, setQuery] = useState("");
   const [rows, setRows] = useState<Row[]>([]);
-  const [open, setOpen] = useState(false);
+  const [page, setPage] = useState(1);
+  const [total, setTotal] = useState(0);
+  const [error, setError] = useState("");
+  useEffect(() => {
+    let active = true;
+    api(`/api/records/${entity}?q=${encodeURIComponent(query)}&page=${page}`).then(data => { if (active) { setRows(data.rows); setTotal(data.total); setError(""); } }).catch(e => { if (active) setError(message(e)); });
+    return () => { active = false; };
+  }, [entity, query, page]);
+  return <div className="space-y-1"><Input aria-label={`Search ${entity}`} placeholder={`Search ${pretty(entity)}`} value={query} onChange={e => { setQuery(e.target.value); setPage(1); }}/><select aria-label={`Select ${entity}`} className="w-full rounded border p-2" value={value} onChange={e => onChange(e.target.value)}><option value="">Select a record</option>{value && !rows.some(r => r.id === value) ? <option value={value}>{value} (selected)</option> : null}{rows.map(row => <option key={row.id} value={row.id}>{label(row)} · {row.id}</option>)}</select><div className="flex items-center gap-2 text-xs"><button type="button" disabled={page === 1} onClick={() => setPage(page - 1)}>Previous</button><span>Page {page} · {total} records</span><button type="button" disabled={page * 20 >= total} onClick={() => setPage(page + 1)}>Next</button></div><Notice text={error}/></div>;
+}
+function RecordField({ field, value, onChange }: { field: Field; value: string; onChange: (value: string) => void }) {
+  if (field.relation) return <RecordPicker entity={field.relation} value={value} onChange={onChange}/>;
+  if (field.kind === "boolean") return <input aria-label={pretty(field.name)} type="checkbox" checked={value === "true"} onChange={e => onChange(String(e.target.checked))}/>;
+  return <Input aria-label={pretty(field.name)} type={field.kind === "date" ? "date" : field.kind === "number" ? "number" : "text"} step={field.integer ? "1" : "any"} min={field.min} max={field.max} value={value} onChange={e => onChange(e.target.value)} required={field.required || Boolean(field.relation)}/>;
+}
+function EntityBlock({ entity, role, autoOpen }: { entity: string; role: string; autoOpen: boolean }) {
+  const fields = recordMetadata[entity].fields;
+  const [rows, setRows] = useState<Row[]>([]);
+  const [page, setPage] = useState(1);
+  const [total, setTotal] = useState(0);
+  const [query, setQuery] = useState("");
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [open, setOpen] = useState(autoOpen && canWrite(role));
   const [selected, setSelected] = useState<Row | null>(null);
   const [form, setForm] = useState<Record<string, string>>({});
-  const [saving, setSaving] = useState(false);
-  const [editing, setEditing] = useState(false);
-  const [confirmingDelete, setConfirmingDelete] = useState(false);
-  const [editForm, setEditForm] = useState<Record<string, string>>({});
-  const [busy, setBusy] = useState(false);
-
-  useEffect(() => {
-    if (autoOpen) setOpen(true);
-  }, [autoOpen, entityName]);
-
+  const [reason, setReason] = useState("");
+  const [notice, setNotice] = useState("");
+  const [deleting, setDeleting] = useState(false);
   const load = useCallback(async () => {
-    const response = await fetch(`/api/records/${entityName}`);
-    const data = await response.json().catch(() => ({ rows: [] }));
-    setRows(data.rows ?? []);
-  }, [entityName]);
-
+    const data = await api(`/api/records/${entity}?page=${page}&q=${encodeURIComponent(query)}`);
+    setRows(data.rows); setTotal(data.total);
+  }, [entity, page, query]);
   useEffect(() => {
-    load();
-  }, [load]);
-
-  async function create() {
-    setSaving(true);
-    await fetch(`/api/records/${entityName}`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(form),
-    });
-    setSaving(false);
-    setOpen(false);
-    setForm({});
-    await load();
+    let active = true;
+    api(`/api/records/${entity}?page=${page}&q=${encodeURIComponent(query)}`).then(data => { if (active) { setRows(data.rows); setTotal(data.total); setError(""); } }).catch(e => { if (active) setError(message(e)); });
+    return () => { active = false; };
+  }, [entity, page, query]);
+  function edit(row: Row | null) {
+    setSelected(row); setReason(""); setNotice(""); setError(""); setDeleting(false);
+    setForm(Object.fromEntries(fields.map(f => [f.name, row?.[f.name] == null ? (f.kind === "boolean" ? "false" : "") : f.kind === "date" ? String(row[f.name]).slice(0, 10) : String(row[f.name])])));
+    setOpen(true);
   }
-
-  function toFormValue(kind: string, value: unknown): string {
-    if (value === null || value === undefined) return "";
-    if (kind === "date" && typeof value === "string" && value.includes("T")) {
-      return value.slice(0, 10);
-    }
-    if (value instanceof Date) return value.toISOString().slice(0, 10);
-    if (typeof value === "boolean") return value ? "true" : "false";
-    return String(value);
+  async function save(event: React.FormEvent) {
+    event.preventDefault(); setBusy(true); setError("");
+    try {
+      await api(`/api/records/${entity}`, jsonRequest(selected ? "PUT" : "POST", { ...form, ...(selected ? { id: selected.id, updatedAt: selected.updatedAt } : {}) }));
+      setOpen(false); setForm({}); await load();
+    } catch (e) { setError(message(e)); } finally { setBusy(false); }
   }
-
-  function openRecord(row: Row) {
-    setSelected(row);
-    setEditing(false);
-    setConfirmingDelete(false);
-    const next: Record<string, string> = {};
-    for (const f of config.fields) {
-      next[f.name] = toFormValue(f.kind, row[f.name]);
-    }
-    setEditForm(next);
+  async function destroy() {
+    if (!selected) return; setBusy(true); setError("");
+    try { await api(`/api/records/${entity}`, jsonRequest("DELETE", { id: selected.id, updatedAt: selected.updatedAt })); setOpen(false); await load(); } catch (e) { setError(message(e)); } finally { setBusy(false); }
   }
-
-  function closeRecord() {
-    setSelected(null);
-    setEditing(false);
-    setConfirmingDelete(false);
+  async function review() {
+    if (!selected) return; setBusy(true); setError("");
+    try {
+      const data = await api(`/api/reviews/${entity}`, jsonRequest("POST", { id: selected.id, updatedAt: selected.updatedAt, reason }));
+      setNotice(`${data.status}${data.verificationToken ? ` · Verification: ${location.origin}/api/verify/${data.verificationToken}` : ""}`); await load();
+    } catch (e) { setError(message(e)); } finally { setBusy(false); }
   }
-
-  async function saveEdit() {
-    if (!selected) return;
-    setBusy(true);
-    await fetch(`/api/records/${entityName}`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id: selected.id, ...editForm }),
-    });
-    setBusy(false);
-    closeRecord();
-    await load();
-  }
-
-  async function destroyRecord() {
-    if (!selected) return;
-    setBusy(true);
-    await fetch(`/api/records/${entityName}?id=${encodeURIComponent(selected.id)}`, {
-      method: "DELETE",
-    });
-    setBusy(false);
-    closeRecord();
-    await load();
-  }
-
-  const fields = config.fields;
-
-  return (
-    <Card>
-      <CardHeader className="flex flex-row items-center justify-between space-y-0">
-        <div>
-          <CardTitle>{config.label}</CardTitle>
-          <CardDescription>{rows.length} records</CardDescription>
-        </div>
-        <Button size="sm" onClick={() => setOpen(true)}>
-          <Plus className="h-4 w-4" /> New
-        </Button>
-      </CardHeader>
-      <CardContent>
-        <Table>
-          <TableHeader>
-            <TableRow>
-              {fields.slice(0, 5).map((f) => (
-                <TableHead key={f.name}>{pretty(f.name)}</TableHead>
-              ))}
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {rows.slice(0, 10).map((row) => (
-              <TableRow
-                key={row.id}
-                className="cursor-pointer"
-                onClick={() => openRecord(row)}
-              >
-                {fields.slice(0, 5).map((f) => (
-                  <TableCell key={f.name}>
-                    {typeof row[f.name] === "string" &&
-                    /T\d{2}:\d{2}/.test(row[f.name] as string)
-                      ? formatDateTime(row[f.name] as string)
-                      : renderCell(row[f.name])}
-                  </TableCell>
-                ))}
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      </CardContent>
-      <Dialog
-        open={open}
-        onClose={() => setOpen(false)}
-        title={`New ${config.label}`}
-      >
-        <div className="space-y-3">
-          {fields.map((f) => (
-            <div key={f.name} className="space-y-1">
-              <Label>{pretty(f.name)}</Label>
-              <FieldInput
-                name={f.name}
-                kind={f.kind}
-                value={form[f.name] ?? ""}
-                onChange={(v) => setForm((prev) => ({ ...prev, [f.name]: v }))}
-              />
-            </div>
-          ))}
-          <Button onClick={create} disabled={saving} className="w-full">
-            {saving ? "Saving..." : "Create record"}
-          </Button>
-        </div>
-      </Dialog>
-      <Dialog
-        open={selected !== null}
-        onClose={closeRecord}
-        title={editing ? `Edit ${config.label}` : confirmingDelete ? `Delete ${config.label}?` : config.label}
-      >
-        {selected ? (
-          confirmingDelete ? (
-            <div className="space-y-4">
-              <p className="text-sm text-slate-600">
-                Permanently delete this {config.label.toLowerCase()} record? This cannot be undone.
-              </p>
-              <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800">
-                {config.fields.slice(0, 3).map((f) => (
-                  <p key={f.name}>
-                    <span className="font-semibold">{pretty(f.name)}: </span>
-                    {renderCell(selected[f.name])}
-                  </p>
-                ))}
-              </div>
-              <div className="flex justify-end gap-2">
-                <Button
-                  onClick={() => setConfirmingDelete(false)}
-                  disabled={busy}
-                  className="bg-white text-slate-700 border border-slate-300 hover:bg-slate-50"
-                >
-                  Cancel
-                </Button>
-                <Button
-                  onClick={destroyRecord}
-                  disabled={busy}
-                  className="bg-red-600 text-white hover:bg-red-500"
-                >
-                  {busy ? "Deleting..." : "Confirm delete"}
-                </Button>
-              </div>
-            </div>
-          ) : editing ? (
-            <div className="space-y-3">
-              {config.fields.map((f) => (
-                <div key={f.name} className="space-y-1">
-                  <Label>{pretty(f.name)}</Label>
-                  <FieldInput
-                    name={f.name}
-                    kind={f.kind}
-                    value={editForm[f.name] ?? ""}
-                    onChange={(v) => setEditForm((prev) => ({ ...prev, [f.name]: v }))}
-                  />
-                </div>
-              ))}
-              <div className="flex justify-end gap-2 pt-1">
-                <Button
-                  onClick={() => setEditing(false)}
-                  disabled={busy}
-                  className="bg-white text-slate-700 border border-slate-300 hover:bg-slate-50"
-                >
-                  Cancel
-                </Button>
-                <Button onClick={saveEdit} disabled={busy}>
-                  {busy ? "Saving..." : "Save changes"}
-                </Button>
-              </div>
-            </div>
-          ) : (
-            <div className="space-y-4">
-              <dl className="space-y-3">
-                {Object.entries(selected)
-                  .filter(([, v]) => v !== null && typeof v !== "object")
-                  .map(([key, value]) => (
-                    <div key={key}>
-                      <dt className="text-xs uppercase tracking-wide text-slate-400">
-                        {pretty(key)}
-                      </dt>
-                      <dd className="text-sm text-slate-900">
-                        {renderCell(value)}
-                      </dd>
-                    </div>
-                  ))}
-              </dl>
-              <div className="flex justify-end gap-2 border-t border-slate-100 pt-3">
-                <Button
-                  onClick={() => setEditing(true)}
-                  className="bg-slate-900 text-white hover:bg-slate-700"
-                >
-                  Edit
-                </Button>
-                <Button
-                  onClick={() => setConfirmingDelete(true)}
-                  className="bg-red-600 text-white hover:bg-red-500"
-                >
-                  Delete
-                </Button>
-                <Button
-                  onClick={closeRecord}
-                  className="bg-white text-slate-700 border border-slate-300 hover:bg-slate-50"
-                >
-                  Cancel
-                </Button>
-              </div>
-            </div>
-          )
-        ) : null}
-      </Dialog>
-    </Card>
-  );
+  return <section className="space-y-4 rounded-xl border bg-white p-5"><div className="flex items-center justify-between"><h2 className="text-lg font-semibold">{entities[entity].label} · {total} records</h2>{canWrite(role) ? <Button onClick={() => edit(null)}>New record</Button> : <span>Read only</span>}</div><Notice text={!open ? error : ""}/>{canWrite(role) ? <RecordImport entity={entity} onImported={load}/> : null}<Input aria-label="Search records" placeholder="Search records" value={query} onChange={e => { setQuery(e.target.value); setPage(1); setError(""); }}/><div className="overflow-x-auto"><table className="w-full text-left text-sm"><thead><tr>{fields.slice(0, 5).map(f => <th key={f.name} className="p-2">{pretty(f.name)}</th>)}<th>Details</th></tr></thead><tbody>{rows.map(row => <tr className="border-t" key={row.id}>{fields.slice(0, 5).map(f => <td key={f.name} className="max-w-64 truncate p-2">{String(row[f.name] ?? "—")}</td>)}<td><button className="underline" onClick={() => edit(row)}>Open</button></td></tr>)}</tbody></table></div><div className="flex gap-4"><Button disabled={page === 1} onClick={() => setPage(page - 1)}>Previous</Button><span>Page {page} of {Math.max(1, Math.ceil(total / 20))}</span><Button disabled={page * 20 >= total} onClick={() => setPage(page + 1)}>Next</Button></div>
+    <Dialog open={open} onClose={() => { if (!busy) setOpen(false); }} title={`${selected ? "Record" : "New"} · ${entities[entity].label}`}><div className="space-y-4"><Notice text={error}/><Notice text={notice}/><form onSubmit={save} className="space-y-3"><fieldset disabled={!canWrite(role) || busy} className="space-y-3">{fields.map(f => <label key={f.name} className="block space-y-1 text-sm"><span>{pretty(f.name)}{f.required || f.relation ? " *" : ""}</span><RecordField field={f} value={form[f.name] ?? (f.kind === "boolean" ? "false" : "")} onChange={value => setForm(prev => ({ ...prev, [f.name]: value }))}/></label>)}{canWrite(role) ? <Button type="submit" disabled={busy}>{busy ? "Saving…" : "Save record"}</Button> : null}</fieldset></form>
+    {selected && canWrite(role) ? <div className="space-y-2 border-t pt-3"><p className="text-sm">Approval requires two independent reviewers of the saved record. The last editor cannot approve. Approval records a human decision; external verification and submission require their own services.</p><textarea aria-label="Review rationale" className="w-full rounded border p-2" placeholder="Evidence reviewed and decision rationale" value={reason} onChange={e => setReason(e.target.value)}/><Button onClick={review} disabled={busy || reason.trim().length < 20}>Record independent review</Button></div> : null}
+    {selected && canDelete(role) ? <div className="border-t pt-3">{deleting ? <><p>Permanently delete this record?</p><Button disabled={busy} onClick={destroy}>Confirm permanent deletion</Button><Button disabled={busy} onClick={() => setDeleting(false)}>Cancel</Button></> : <Button onClick={() => setDeleting(true)}>Delete record…</Button>}</div> : null}</div></Dialog></section>;
 }
 
-interface AiResult {
-  summary: string;
-  findings: string[];
-  recommendations: string[];
-  riskLevel: "low" | "medium" | "high";
-  model: string;
-  contextRows?: number;
-}
-
-// One-click presets that fill AI input fields. Generic across all 19 apps:
-// field-name heuristics produce realistic sample vs high-risk edge values.
-function sampleValue(field: string, variant: "sample" | "edge"): string {
-  const f = field.toLowerCase();
-  const has = (...keys: string[]) => keys.some((k) => f.includes(k));
-  if (variant === "edge") {
-    if (has("date", "closing", "period", "year", "horizon", "deadline")) return "2021-01-05 (overdue / backdated)";
-    if (has("email")) return "not-an-email";
-    if (has("amount", "cost", "spend", "exposure", "limit", "pm", "rate", "price", "budget", "award", "credit", "balance", "payout", "loss")) return "999999999 (extreme outlier)";
-    if (has("rate", "pct", "percent", "ratio", "score", "attendance")) return "999% (out of range)";
-    if (has("count", "number", "headcount", "members", "size", "rows", "hours", "minutes", "days")) return "-5 (invalid negative)";
-    if (has("phone")) return "123";
-    if (has("url", "fileurl", "link")) return "htp:/broken-link";
-    if (has("icd", "code", "hcc", "cpt", "bin", "reasoncode", "network")) return "XXX-000 (unknown code)";
-    if (has("evidence", "notes", "summary", "text", "description", "findings")) return "";
-    return "UNKNOWN-EDGE-VALUE -- missing / conflicting data";
-  }
-  if (has("servicedate", "date", "heldat", "sentat", "closing", "deadline", "startat")) return "2026-08-15";
-  if (has("paymentyear", "year")) return "2025";
-  if (has("period", "horizon", "window", "timeframe")) return "Q3 2026";
-  if (has("email")) return "analyst@example.com";
-  if (has("phone")) return "+1-555-010-2030";
-  if (has("url", "fileurl", "link")) return "https://example.com/files/sample-1.csv";
-  if (has("icd10", "icd")) return "E11.65";
-  if (has("hcc")) return "HCC-19 Diabetes with complications";
-  if (has("amount", "cost", "spend", "payout", "award", "budget", "limit", "attachment")) return "125000";
-  if (has("pm")) return "1850";
-  if (has("rate", "pct", "percent", "ratio")) return "4.2%";
-  if (has("count", "headcount", "members", "size", "rows", "vacancies")) return "240";
-  if (has("hours")) return "10";
-  if (has("minutes", "duration")) return "45";
-  if (has("owner", "manager", "analyst", "attendees", "employee", "student", "member", "executive", "reviewer")) return "Jordan Lee";
-  if (has("role", "title")) return "Senior Analyst";
-  if (has("status")) return "open";
-  if (has("risk", "severity")) return "medium";
-  if (has("network")) return "Visa";
-  if (has("reasoncode", "reason")) return "10.4 (fraud suspected)";
-  if (has("payer")) return "Acme Health Plan";
-  if (has("repo")) return "acme/api";
-  if (has("treaty", "treatyid")) return "TR-2026-014";
-  if (has("county")) return "Cook County";
-  if (has("specialty")) return "Cardiology";
-  if (has("tone")) return "supportive and factual";
-  return `Sample ${pretty(field)} — replace with real input`;
-}
-
-function WorkflowBlock({ slug }: { slug: string }) {
-  const config = workflows.find((w) => w.slug === slug);
+function WorkflowBlock({ slug, role }: { slug: string; role: string }) {
+  const config = workflows.find(w => w.slug === slug)!;
   const [input, setInput] = useState<Record<string, string>>({});
-  const [running, setRunning] = useState(false);
-  const [result, setResult] = useState<AiResult | null>(null);
-  if (!config) return null;
-
-  const [ranAt, setRanAt] = useState<string>("");
-
-  async function run() {
-    setRunning(true);
-    const response = await fetch(`/api/ai/${slug}`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ input }),
-    });
-    const data = await response.json().catch(() => null);
-    setRunning(false);
-    if (data?.result) {
-      setResult(data.result);
-      setRanAt(new Date().toLocaleString());
-    }
-  }
-
-  function fillFields(variant: "sample" | "edge" | "minimal" | "complete") {
-    const fields = config?.fields ?? [];
-    const next: Record<string, string> = {};
-    if (variant === "minimal") {
-      // Prove optional fields work: fill only the first field.
-      if (fields[0]) next[fields[0]] = sampleValue(fields[0], "sample");
-    } else if (variant === "complete") {
-      for (const field of fields) {
-        next[field] = `${sampleValue(field, "sample")} — detailed context provided for thorough review`;
-      }
-    } else {
-      for (const field of fields) {
-        next[field] = sampleValue(field, variant);
-      }
-    }
-    setInput(next);
-    setResult(null);
-  }
-
-  function fillOne(field: string, variant: "sample" | "edge") {
-    setInput((prev) => ({ ...prev, [field]: sampleValue(field, variant) }));
-    setResult(null);
-  }
-
-  const riskBadge =
-    result?.riskLevel === "high"
-      ? "bg-red-50 text-red-700"
-      : result?.riskLevel === "medium"
-        ? "bg-amber-50 text-amber-700"
-        : "bg-emerald-50 text-emerald-700";
-
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <Sparkles className="h-4 w-4" /> {config.title}
-        </CardTitle>
-        <CardDescription>{config.description}</CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-3">
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-            Fill inputs
-          </span>
-          <button
-            type="button"
-            onClick={() => fillFields("sample")}
-            className="rounded-full border border-emerald-600 bg-emerald-600 px-3 py-1 text-xs font-medium text-white hover:bg-emerald-500"
-          >
-            Fill sample
-          </button>
-          <button
-            type="button"
-            onClick={() => fillFields("edge")}
-            title="Fill with boundary / high-risk values to test validation"
-            className="rounded-full border border-amber-600 bg-white px-3 py-1 text-xs font-medium text-amber-700 hover:bg-amber-50"
-          >
-            Fill edge case
-          </button>
-          <button
-            type="button"
-            onClick={() => fillFields("minimal")}
-            title="Fill only the first field — remaining optional fields stay empty"
-            className="rounded-full border border-sky-600 bg-white px-3 py-1 text-xs font-medium text-sky-700 hover:bg-sky-50"
-          >
-            Fill minimal
-          </button>
-          <button
-            type="button"
-            onClick={() => fillFields("complete")}
-            title="Fill every field with detailed context"
-            className="rounded-full border border-violet-600 bg-white px-3 py-1 text-xs font-medium text-violet-700 hover:bg-violet-50"
-          >
-            Fill complete
-          </button>
-          <button
-            type="button"
-            onClick={() => { setInput({}); setResult(null); }}
-            className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-medium text-slate-600 hover:border-slate-400"
-          >
-            Clear
-          </button>
-        </div>
-        <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-          {config.fields.map((field) => (
-            <div key={field} className="space-y-1">
-              <div className="flex items-center justify-between">
-                <Label>{pretty(field)}</Label>
-                <button
-                  type="button"
-                  onClick={() => fillOne(field, "sample")}
-                  title={`Fill ${pretty(field)} with a sample value (optional field)`}
-                  className="text-[11px] font-medium text-emerald-700 hover:text-emerald-900 hover:underline"
-                >
-                  Fill
-                </button>
-              </div>
-              <Input
-                value={input[field] ?? ""}
-                placeholder={`Optional — e.g. ${sampleValue(field, "sample").slice(0, 48)}`}
-                onChange={(e) =>
-                  setInput((prev) => ({ ...prev, [field]: e.target.value }))
-                }
-              />
-            </div>
-          ))}
-        </div>
-        <Button onClick={run} disabled={running}>
-          {running ? "Analyzing..." : "Run analysis"}
-        </Button>
-        {result ? (
-          <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 bg-slate-900 px-4 py-3">
-              <div>
-                <p className="text-sm font-bold text-white">Analysis report — {config.title}</p>
-                <p className="text-xs text-slate-300">
-                  {[ranAt, result.model, typeof result.contextRows === "number" ? `${result.contextRows.toLocaleString()} rows analyzed` : ""].filter(Boolean).join("  •  ")}
-                </p>
-              </div>
-              <Badge className={riskBadge}>{result.riskLevel.toUpperCase()} RISK</Badge>
-            </div>
-            <div className="space-y-4 p-4">
-              <section>
-                <p className="text-xs font-bold uppercase tracking-wider text-slate-500">
-                  Executive summary
-                </p>
-                <p className="mt-1 border-l-4 border-slate-900 bg-slate-50 p-3 text-sm leading-relaxed text-slate-900">
-                  {result.summary}
-                </p>
-              </section>
-              {result.findings.length > 0 ? (
-                <section>
-                  <p className="text-xs font-bold uppercase tracking-wider text-slate-500">
-                    Key findings ({result.findings.length})
-                  </p>
-                  <ol className="mt-2 space-y-2">
-                    {result.findings.map((f, i) => (
-                      <li key={i} className="flex gap-3 rounded-lg border border-slate-200 p-3 text-sm text-slate-800">
-                        <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-slate-900 text-xs font-bold text-white">
-                          {i + 1}
-                        </span>
-                        <span>{f}</span>
-                      </li>
-                    ))}
-                  </ol>
-                </section>
-              ) : null}
-              {result.recommendations.length > 0 ? (
-                <section>
-                  <p className="text-xs font-bold uppercase tracking-wider text-slate-500">
-                    Recommended actions ({result.recommendations.length})
-                  </p>
-                  <ol className="mt-2 space-y-2">
-                    {result.recommendations.map((f, i) => (
-                      <li key={i} className="flex gap-3 rounded-lg border border-emerald-200 bg-emerald-50/50 p-3 text-sm text-slate-800">
-                        <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-emerald-600 text-xs font-bold text-white">
-                          ✓
-                        </span>
-                        <span>
-                          <span className="font-semibold">Action {i + 1}: </span>
-                          {f}
-                        </span>
-                      </li>
-                    ))}
-                  </ol>
-                </section>
-              ) : null}
-              <section>
-                <p className="text-xs font-bold uppercase tracking-wider text-slate-500">
-                  Inputs reviewed
-                </p>
-                <div className="mt-2 flex flex-wrap gap-1.5">
-                  {Object.entries(input)
-                    .filter(([, v]) => v.trim().length > 0)
-                    .map(([k]) => (
-                      <span key={k} className="rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-medium text-slate-600">
-                        {pretty(k)}
-                      </span>
-                    ))}
-                  {Object.values(input).every((v) => !v.trim()) ? (
-                    <span className="text-xs italic text-slate-400">No inputs provided — result is directional only.</span>
-                  ) : null}
-                </div>
-              </section>
-              <div className="flex flex-wrap gap-2 border-t border-slate-100 pt-3">
-                <button
-                  type="button"
-                  onClick={() => {
-                    const md = [
-                      `# ${config.title} — Analysis Report`,
-                      ranAt ? `_${ranAt} • ${result.model} • ${result.riskLevel} risk_` : `_${result.model} • ${result.riskLevel} risk_`,
-                      "",
-                      "## Executive summary",
-                      result.summary,
-                      "",
-                      "## Key findings",
-                      ...result.findings.map((f, i) => `${i + 1}. ${f}`),
-                      "",
-                      "## Recommended actions",
-                      ...result.recommendations.map((f, i) => `${i + 1}. ${f}`),
-                    ].join("\n");
-                    navigator.clipboard?.writeText(md).catch(() => {});
-                  }}
-                  className="rounded-md border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50"
-                >
-                  Copy report (Markdown)
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    const md = [
-                      `# ${config.title} — Analysis Report`,
-                      ranAt ? `_${ranAt} • ${result.model} • ${result.riskLevel} risk_` : `_${result.model} • ${result.riskLevel} risk_`,
-                      "",
-                      "## Executive summary",
-                      result.summary,
-                      "",
-                      "## Key findings",
-                      ...result.findings.map((f, i) => `${i + 1}. ${f}`),
-                      "",
-                      "## Recommended actions",
-                      ...result.recommendations.map((f, i) => `${i + 1}. ${f}`),
-                    ].join("\n");
-                    const blob = new Blob([md], { type: "text/markdown" });
-                    const url = URL.createObjectURL(blob);
-                    const a = document.createElement("a");
-                    a.href = url;
-                    a.download = `${slug}-report.md`;
-                    a.click();
-                    URL.revokeObjectURL(url);
-                  }}
-                  className="rounded-md bg-slate-900 px-3 py-1.5 text-xs font-medium text-white hover:bg-slate-700"
-                >
-                  Download .md
-                </button>
-              </div>
-            </div>
-          </div>
-        ) : null}
-      </CardContent>
-    </Card>
-  );
-}
-
-function DomainWorkspace({ page }: { page: PageConfig }) {
-  const router = useRouter();
-  const pathname = usePathname();
-  const searchParams = useSearchParams();
-  const defaultMode = page.workflows.length > 0 ? "analysis" : "records";
-  const entityParam = searchParams.get("entity");
-  const modeParam = searchParams.get("mode");
-  const workflowParam = searchParams.get("workflow");
-  const newParam = searchParams.get("new");
-  const initialEntity =
-    entityParam && page.entities.includes(entityParam)
-      ? entityParam
-      : (page.entities[0] ?? "");
-  const initialMode =
-    modeParam === "analysis" || modeParam === "records"
-      ? modeParam
-      : defaultMode;
-  const initialWorkflow =
-    workflowParam && page.workflows.includes(workflowParam)
-      ? workflowParam
-      : (page.workflows[0] ?? "");
-  const [mode, setMode] = useState<"analysis" | "records">(initialMode);
-  const [workflow, setWorkflow] = useState(initialWorkflow);
-  const [entity, setEntity] = useState(initialEntity);
-
-  // Keep dropdown <-> sidebar <-> URL in sync (sidebar links, back/forward).
+  const [subjectEntity, setSubjectEntity] = useState(Object.keys(entities)[0]);
+  const [subjectId, setSubjectId] = useState("");
+  const [evidenceEntity, setEvidenceEntity] = useState(Object.keys(entities)[0]);
+  const [evidenceId, setEvidenceId] = useState("");
+  const [artifactIds, setArtifactIds] = useState<string[]>([]);
+  const [evidence, setEvidence] = useState<{ entity: string; id: string }[]>([]);
+  const [result, setResult] = useState<Analysis | null>(null);
+  const [history, setHistory] = useState<Analysis[]>([]);
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+  const load = useCallback(async () => {
+    const data = await api(`/api/analyses?workflow=${encodeURIComponent(slug)}`);
+    setHistory(data.items.map((item: { id: string; result: Analysis; model: string }) => ({ ...item.result, id: item.id, model: item.model })));
+  }, [slug]);
   useEffect(() => {
-    if (entityParam && page.entities.includes(entityParam) && entityParam !== entity) {
-      setEntity(entityParam);
-      if (page.workflows.length === 0) setMode("records");
-      else if (modeParam === "records") setMode("records");
-    }
-    if (modeParam && modeParam !== mode && (modeParam === "analysis" || modeParam === "records")) {
-      setMode(modeParam);
-    }
-    if (workflowParam && page.workflows.includes(workflowParam) && workflowParam !== workflow) {
-      setWorkflow(workflowParam);
-      setMode("analysis");
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [entityParam, modeParam, workflowParam]);
-
-  function updateUrl(nextEntity: string, nextMode: "analysis" | "records", nextWorkflow?: string) {
-    const params = new URLSearchParams(searchParams.toString());
-    params.set("entity", nextEntity);
-    params.set("mode", nextMode);
-    if (nextWorkflow) params.set("workflow", nextWorkflow);
-    params.delete("new");
-    router.replace(`${pathname}?${params.toString()}`, { scroll: false });
+    let active = true;
+    api(`/api/analyses?workflow=${encodeURIComponent(slug)}`).then(data => { if (active) setHistory(data.items.map((item: { id: string; result: Analysis; model: string }) => ({ ...item.result, id: item.id, model: item.model }))); }).catch(e => { if (active) setError(message(e)); });
+    return () => { active = false; };
+  }, [slug]);
+  async function run() {
+    setBusy(true); setError(""); setResult(null);
+    try { const data = await api(`/api/ai/${slug}`, jsonRequest("POST", { input, scope: { entity: subjectEntity, id: subjectId }, evidence, artifactIds })); setResult(data.result); await load(); } catch (e) { setError(message(e)); } finally { setBusy(false); }
   }
-
-  function pickMode(next: "analysis" | "records") {
-    setMode(next);
-    updateUrl(entity, next, workflow);
-  }
-
-  const selectedWorkflow = workflows.find((item) => item.slug === workflow);
-  const selectedEntity = entities[entity];
-
-  return (
-    <div className="space-y-6">
-      <div className="space-y-1">
-        <h1 className="text-2xl font-bold text-slate-900">{page.label}</h1>
-        {page.description ? (
-          <p className="text-sm text-slate-500">{page.description}</p>
-        ) : null}
-      </div>
-
-      <div className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div className="inline-flex w-full rounded-lg bg-slate-100 p-1 sm:w-auto" role="tablist" aria-label="Workspace mode">
-            {page.workflows.length > 0 ? (
-              <button
-                type="button"
-                role="tab"
-                aria-selected={mode === "analysis"}
-                onClick={() => pickMode("analysis")}
-                className={`flex flex-1 items-center justify-center gap-2 rounded-md px-4 py-2 text-sm font-medium transition-colors sm:flex-none ${mode === "analysis" ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-800"}`}
-              >
-                <Sparkles className="h-4 w-4" /> AI analysis
-              </button>
-            ) : null}
-            <button
-              type="button"
-              role="tab"
-              aria-selected={mode === "records"}
-              onClick={() => pickMode("records")}
-              className={`flex flex-1 items-center justify-center gap-2 rounded-md px-4 py-2 text-sm font-medium transition-colors sm:flex-none ${mode === "records" ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-800"}`}
-            >
-              <Database className="h-4 w-4" /> Records
-            </button>
-          </div>
-        </div>
-
-        <p className="mt-3 px-1 text-xs text-slate-500">
-          {mode === "analysis"
-            ? selectedWorkflow?.description
-            : selectedEntity
-              ? `View and manage ${selectedEntity.label.toLowerCase()} records.`
-              : "Choose a record type."}
-        </p>
-      </div>
-
-      {mode === "analysis" && workflow ? <WorkflowBlock key={workflow} slug={workflow} /> : null}
-      {mode === "records" && entity ? <EntityBlock key={entity} entityName={entity} autoOpen={newParam === "1"} /> : null}
-    </div>
-  );
+  return <section className="space-y-4 rounded-xl border bg-white p-5"><h2 className="text-lg font-semibold">{config.title}</h2><p className="text-sm">Evidence-based draft assistance. Results are saved with their sources for review. External operations and calibrated risk or authenticity scores are not performed by a language model.</p><Notice text={error}/><label className="block">Subject type<select className="ml-2 rounded border p-2" value={subjectEntity} onChange={e => { setSubjectEntity(e.target.value); setSubjectId(""); setEvidence([]); setArtifactIds([]); }}>{Object.keys(entities).map(name => <option key={name}>{name}</option>)}</select></label><RecordPicker entity={subjectEntity} value={subjectId} onChange={id => { setSubjectId(id); setEvidence([]); setArtifactIds([]); }}/><EvidenceUpload key={`${subjectEntity}:${subjectId}`} entity={subjectEntity} id={subjectId} onSelect={setArtifactIds}/><details className="rounded border p-3"><summary>Add related evidence from any page</summary><select aria-label="Evidence type" className="my-2 rounded border p-2" value={evidenceEntity} onChange={e => { setEvidenceEntity(e.target.value); setEvidenceId(""); }}>{Object.keys(entities).map(name => <option key={name}>{name}</option>)}</select><RecordPicker entity={evidenceEntity} value={evidenceId} onChange={setEvidenceId}/><Button disabled={!evidenceId || evidence.length >= 100} onClick={() => { if (!evidence.some(e => e.entity === evidenceEntity && e.id === evidenceId)) setEvidence([...evidence, { entity: evidenceEntity, id: evidenceId }]); }}>Add evidence</Button><ul>{evidence.map((e, i) => <li key={`${e.entity}:${e.id}`}>{e.entity}: {e.id} <button className="underline" onClick={() => setEvidence(evidence.filter((_, index) => index !== i))}>Remove</button></li>)}</ul></details><WorkflowExamples key={slug} workflow={slug} fields={config.fields} busy={busy} onFill={values => { setInput(values); setResult(null); setError(""); }}/><div className="grid gap-3 md:grid-cols-2">{config.fields.map(field => <label key={field} className="text-sm">{pretty(field)}<textarea className="block min-h-24 w-full rounded border p-2" value={input[field] ?? ""} onChange={e => setInput({ ...input, [field]: e.target.value })}/></label>)}</div><Button onClick={run} disabled={busy || !subjectId || !canWrite(role)}>{busy ? "Preparing draft…" : "Generate and save draft"}</Button>
+    {result ? <article className="space-y-3 rounded border p-4"><Button onClick={() => exportDraft(result)}>Download draft with sources</Button><p className="text-xs">Saved draft {result.id} · {result.model}{typeof result.contextRows === "number" ? ` · ${result.contextRows} complete records supplied` : ""}</p><h3 className="font-semibold">{result.summary}</h3><ul className="list-disc pl-5">{result.findings.map((item, i) => <li key={i}>{item}</li>)}</ul><h4>Suggested actions</h4><ol className="list-decimal pl-5">{result.recommendations.map((item, i) => <li key={i}>{item}</li>)}</ol><h4>Evidence references</h4><ul>{result.citations.map(id => <li key={id}>{id}</li>)}</ul><h4>Claim excerpts</h4>{result.claims?.map((claim,i) => <blockquote key={i} className="border-l-2 pl-3"><p>{claim.claim}</p><p>“{claim.quote}”</p><cite>{claim.sourceId}</cite></blockquote>)}<h4>Limitations</h4><ul>{result.limitations.map((item, i) => <li key={i}>{item}</li>)}</ul></article> : null}<details><summary>Saved analysis history ({history.length}, newest 100)</summary>{history.map(item => <button className="block p-2 text-left underline" key={item.id} onClick={() => setResult(item)}>{item.id} · {item.summary.slice(0, 90)}</button>)}</details></section>;
 }
 
-export default function DomainPage({ href }: { href: string }) {
-  return (
-    <Suspense fallback={<p className="text-slate-500">Loading…</p>}>
-      <DomainPageInner href={href} />
-    </Suspense>
-  );
+function Workspace({ href }: { href: string }) {
+  const params = useSearchParams();
+  const page = pages.find(p => p.href === href)!;
+  const selectedEntity = page.entities.includes(params.get("entity") || "") ? params.get("entity")! : page.entities[0];
+  const selectedWorkflow = page.workflows.includes(params.get("workflow") || "") ? params.get("workflow")! : page.workflows[0];
+  const [entity, setEntity] = useState(selectedEntity);
+  const [workflow, setWorkflow] = useState(selectedWorkflow);
+  const [mode, setMode] = useState(params.get("mode") === "analysis" && selectedWorkflow ? "analysis" : "records");
+  const [role, setRole] = useState("ANALYST");
+  const [error, setError] = useState("");
+  useEffect(() => { api("/api/session").then(data => setRole(data.user.role)).catch(e => setError(message(e))); }, []);
+  return <div className="space-y-5"><h1 className="text-2xl font-bold">{page.label}</h1><Notice text={error}/><div className="flex flex-wrap gap-3"><Button onClick={() => setMode("records")}>Records</Button>{page.workflows.length ? <Button onClick={() => setMode("analysis")}>AI drafts</Button> : null}<select aria-label="Select workspace" className="rounded border p-2" value={mode === "records" ? entity : workflow} onChange={e => mode === "records" ? setEntity(e.target.value) : setWorkflow(e.target.value)}>{(mode === "records" ? page.entities : page.workflows).map(name => <option key={name} value={name}>{mode === "records" ? entities[name].label : workflows.find(w => w.slug === name)?.title}</option>)}</select></div>{mode === "records" ? <EntityBlock key={`${entity}:${role}`} entity={entity} role={role} autoOpen={params.get("new") === "1"}/> : <WorkflowBlock key={workflow} slug={workflow} role={role}/>}</div>;
 }
-
-function DomainPageInner({ href }: { href: string }) {
-  const page = pages.find((item) => item.href === href);
-  if (!page) return <p className="text-slate-500">Unknown page.</p>;
-  return <DomainWorkspace key={page.href} page={page} />;
-}
+function Inner({ href }: { href: string }) { const params = useSearchParams(); return <Workspace key={`${href}:${params.toString()}`} href={href}/>; }
+export default function DomainPage({ href }: { href: string }) { return <Suspense fallback={<p>Loading…</p>}><Inner href={href}/></Suspense>; }

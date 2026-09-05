@@ -35,13 +35,17 @@ export const authOptions: NextAuthOptions = {
         password: { label: "Password", type: "password" },
       },
       async authorize(credentials) {
+        if (process.env.NODE_ENV === "production" && credentials?.password === "Demo!23456") return null;
         if (!credentials?.email || !credentials.password) {
           return null;
         }
+        const bucket = `login:${credentials.email.trim().toLowerCase()}:${new Date().toISOString().slice(0, 13)}`;
+        const attempts = await prisma.usageBucket.upsert({where:{id:bucket},create:{id:bucket,calls:1},update:{calls:{increment:1}}});
+        if (attempts.calls > 20) return null;
         const user = await prisma.user.findUnique({
-          where: { email: credentials.email },
+          where: { email: credentials.email.trim().toLowerCase() },
         });
-        if (!user) return null;
+        if (!user?.active) return null;
         const ok = await bcrypt.compare(
           credentials.password,
           user.passwordHash

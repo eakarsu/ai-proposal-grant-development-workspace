@@ -15,8 +15,9 @@ WORKDIR /app
 ENV NODE_ENV=production
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/.next ./.next
-COPY --from=builder /app/public ./public
 COPY package.json next.config.ts ./
 COPY prisma ./prisma
-EXPOSE 3000
+COPY scripts ./scripts
+ENV PORT=4629
+EXPOSE 4629
 CMD ["npm", "start"]

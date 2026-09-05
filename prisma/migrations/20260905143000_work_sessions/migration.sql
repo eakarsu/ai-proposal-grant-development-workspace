@@ -1,0 +1,4 @@
+CREATE TABLE "WorkSession" ("id" TEXT PRIMARY KEY, "actorId" TEXT NOT NULL, "respondentId" TEXT NOT NULL, "subjectEntity" TEXT NOT NULL, "subjectId" TEXT NOT NULL, "questions" JSONB NOT NULL, "answers" JSONB NOT NULL, "currentQuestion" TEXT, "status" TEXT NOT NULL, "deadline" TIMESTAMP(3) NOT NULL, "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP);
+CREATE INDEX "WorkSession_respondentId_createdAt_idx" ON "WorkSession"("respondentId", "createdAt");
+CREATE TABLE "SessionMedia" ("id" TEXT PRIMARY KEY, "sessionId" TEXT NOT NULL, "questionId" TEXT NOT NULL, "actorId" TEXT NOT NULL, "contentType" TEXT NOT NULL, "bytes" BYTEA NOT NULL, "contentHash" TEXT NOT NULL, "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP);
+CREATE INDEX "SessionMedia_sessionId_idx" ON "SessionMedia"("sessionId");

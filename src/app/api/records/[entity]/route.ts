@@ -1,156 +1,62 @@
-import { NextRequest, NextResponse } from "next/server";
+import { readJson } from "@/lib/request-body";
+import { NextRequest } from "next/server";
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import { requireUser } from "@/lib/api-auth";
-import { entities } from "@/config/app";
-
+import { authorize } from "@/lib/api-auth";
+import { recordMetadata, validateRecord, objectBody, RequestError } from "@/lib/record-policy";
+import { records, validateRelations, errorResponse } from "@/lib/record-store";
 export const dynamic = "force-dynamic";
+type Context = { params: Promise<{ entity: string }> };
 
-function delegateFor(entity: string) {
-  const config = entities[entity];
-  if (!config) return null;
-  const delegate = config.name.charAt(0).toLowerCase() + config.name.slice(1);
-  const db = prisma as unknown as Record<
-    string,
-    {
-      findMany: (args?: unknown) => Promise<unknown[]>;
-      create: (args: { data: Record<string, unknown> }) => Promise<unknown>;
-      update: (args: { where: { id: string }; data: Record<string, unknown> }) => Promise<unknown>;
-      delete: (args: { where: { id: string } }) => Promise<unknown>;
-    }
-  >;
-  return db[delegate] ?? null;
+export async function GET(request: NextRequest, context: Context) {
+  try {
+    await authorize();
+    const { entity } = await context.params;
+    const client = records(prisma, entity);
+    const params = request.nextUrl.searchParams;
+    const page = Number(params.get("page") || 1);
+    const pageSize = Number(params.get("pageSize") || 20);
+    if (!Number.isInteger(page) || page < 1 || page > 100000 || !Number.isInteger(pageSize) || pageSize < 1 || pageSize > 100) throw new RequestError("Invalid page or page size", 400);
+    const search = (params.get("q") || "").slice(0, 200);
+    const searchFields = recordMetadata[entity].fields.filter(f => f.kind === "string");
+    const where = search && searchFields.length ? { OR: searchFields.map(f => ({ [f.name]: { contains: search, mode: "insensitive" } })) } : {};
+    const [rows, total] = await prisma.$transaction([
+      // Dynamic delegates remain Prisma promises at runtime.
+      client.findMany({ where, orderBy: [{ createdAt: "desc" }, { id: "desc" }], skip: (page - 1) * pageSize, take: pageSize }) as Prisma.PrismaPromise<unknown>,
+      client.count({ where }) as Prisma.PrismaPromise<unknown>,
+    ]);
+    return Response.json({ rows, total, page, pageSize });
+  } catch (error) { return errorResponse(error); }
 }
 
-function coerce(kind: string, value: unknown): unknown {
-  if (value === undefined || value === null || value === "") return undefined;
-  if (kind === "number") return Number(value);
-  if (kind === "boolean") return value === true || value === "true" || value === "on";
-  if (kind === "date") return new Date(String(value));
-  return String(value);
+async function mutate(request: NextRequest, context: Context, method: "create" | "update" | "delete") {
+  try {
+    const user = await authorize(method === "delete" ? "delete" : "write");
+    const { entity } = await context.params;
+    const body = objectBody(await readJson(request));
+    const id = body.id;
+    if (method !== "create" && (typeof id !== "string" || !id)) throw new RequestError("Record id is required", 400);
+    const row = await prisma.$transaction(async tx => {
+      const client = records(tx, entity);
+      const before = method === "create" ? null : await client.findUnique({ where: { id } });
+      if (method !== "create" && !before) throw new RequestError("Record not found", 404);
+      if (before && (!body.updatedAt || new Date(String(body.updatedAt)).getTime() !== (before.updatedAt instanceof Date ? before.updatedAt.getTime() : new Date(String(before.updatedAt)).getTime()))) throw new RequestError("This record has changed. Reload before saving or deleting.", 409);
+      if (method === "delete") {
+        for (const child of Object.values(recordMetadata).filter(m => m.parent?.entity === entity)) {
+          if (await records(tx, child.name).count({ where: { [child.parent!.field]: id } })) throw new RequestError("Reassign dependent records before deleting their parent", 409);
+        }
+      }
+      const data = method === "delete" ? {} : validateRecord(entity, body, before ?? undefined);
+      await validateRelations(tx, entity, { ...before, ...data });
+      // An approved record becomes a draft whenever its contents change.
+      if (method === "update" && before?.status === "Approved") data.status = "Draft";
+      const after = method === "create" ? await client.create({ data }) : method === "update" ? await client.update({ where: { id }, data }) : await client.delete({ where: { id } });
+      await tx.auditLog.create({ data: { actorId: user.id, actorName: user.name, action: method.toUpperCase(), entity, entityId: after.id, detail: JSON.stringify({ before, after: method === "delete" ? null : after }) } });
+      return after;
+    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+    return Response.json({ row }, { status: method === "create" ? 201 : 200 });
+  } catch (error) { return errorResponse(error); }
 }
-
-export async function GET(
-  _request: NextRequest,
-  context: { params: Promise<{ entity: string }> }
-) {
-  const user = await requireUser();
-  if (!user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-  const { entity } = await context.params;
-  const client = delegateFor(entity);
-  if (!client) {
-    return NextResponse.json({ error: "Unknown entity" }, { status: 404 });
-  }
-  const rows = await client.findMany({
-    orderBy: { createdAt: "desc" },
-    take: 200,
-  });
-  return NextResponse.json({ rows });
-}
-
-export async function POST(
-  request: NextRequest,
-  context: { params: Promise<{ entity: string }> }
-) {
-  const user = await requireUser();
-  if (!user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-  const { entity } = await context.params;
-  const config = entities[entity];
-  const client = delegateFor(entity);
-  if (!config || !client) {
-    return NextResponse.json({ error: "Unknown entity" }, { status: 404 });
-  }
-  const body = (await request.json().catch(() => ({}))) as Record<
-    string,
-    unknown
-  >;
-  const data: Record<string, unknown> = {};
-  for (const field of config.fields) {
-    const value = coerce(field.kind, body[field.name]);
-    if (value !== undefined) data[field.name] = value;
-  }
-  const row = await client.create({ data });
-  await prisma.auditLog.create({
-    data: {
-      actorName: user.name ?? user.email,
-      action: "CREATE",
-      entity: config.name,
-      detail: `Record created via ${config.label}`,
-    },
-  });
-  return NextResponse.json({ row }, { status: 201 });
-}
-
-export async function PUT(
-  request: NextRequest,
-  context: { params: Promise<{ entity: string }> }
-) {
-  const user = await requireUser();
-  if (!user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-  const { entity } = await context.params;
-  const config = entities[entity];
-  const client = delegateFor(entity);
-  if (!config || !client) {
-    return NextResponse.json({ error: "Unknown entity" }, { status: 404 });
-  }
-  const body = (await request.json().catch(() => ({}))) as Record<string, unknown>;
-  const id = typeof body.id === "string" ? body.id : "";
-  if (!id) {
-    return NextResponse.json({ error: "Missing id" }, { status: 400 });
-  }
-  const data: Record<string, unknown> = {};
-  for (const field of config.fields) {
-    if (!(field.name in body)) continue;
-    const value = coerce(field.kind, body[field.name]);
-    if (value !== undefined) data[field.name] = value;
-  }
-  const row = await client.update({ where: { id }, data });
-  await prisma.auditLog.create({
-    data: {
-      actorName: user.name ?? user.email,
-      action: "UPDATE",
-      entity: config.name,
-      detail: `Record ${id} updated via ${config.label}`,
-    },
-  });
-  return NextResponse.json({ row });
-}
-
-export async function DELETE(
-  request: NextRequest,
-  context: { params: Promise<{ entity: string }> }
-) {
-  const user = await requireUser();
-  if (!user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-  const { entity } = await context.params;
-  const config = entities[entity];
-  const client = delegateFor(entity);
-  if (!config || !client) {
-    return NextResponse.json({ error: "Unknown entity" }, { status: 404 });
-  }
-  const { searchParams } = new URL(request.url);
-  const body = (await request.json().catch(() => ({}))) as Record<string, unknown>;
-  const id =
-    searchParams.get("id") ??
-    (typeof body.id === "string" ? body.id : null);
-  if (!id) {
-    return NextResponse.json({ error: "Missing id" }, { status: 400 });
-  }
-  await client.delete({ where: { id } });
-  await prisma.auditLog.create({
-    data: {
-      actorName: user.name ?? user.email,
-      action: "DELETE",
-      entity: config.name,
-      detail: `Record ${id} deleted via ${config.label}`,
-    },
-  });
-  return NextResponse.json({ ok: true });
-}
+export const POST = (request: NextRequest, context: Context) => mutate(request, context, "create");
+export const PUT = (request: NextRequest, context: Context) => mutate(request, context, "update");
+export const DELETE = (request: NextRequest, context: Context) => mutate(request, context, "delete");

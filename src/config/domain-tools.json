@@ -1,0 +1,53 @@
+[
+  {
+    "id": "reconcile",
+    "title": "Ledger reconciliation",
+    "description": "Compare debits and credits using integer minor units in a single currency.",
+    "example": {
+      "currency": "USD",
+      "debits": [
+        {
+          "reference": "debit-1",
+          "cents": 10000,
+          "currency": "USD"
+        }
+      ],
+      "credits": [
+        {
+          "reference": "credit-1",
+          "cents": 10000,
+          "currency": "USD"
+        }
+      ]
+    }
+  },
+  {
+    "id": "evidence-check",
+    "title": "Evidence completeness checklist",
+    "description": "Check whether supplied requirements have supporting text. Presence does not prove truth or compliance.",
+    "example": {
+      "requirements": [
+        {
+          "requirement": "Signed source record",
+          "evidence": "Source record reference and reviewer notes"
+        }
+      ]
+    }
+  },
+  {
+    "id": "overdue",
+    "title": "Missed commitment detection",
+    "description": "Compare complete due dates with an explicit as-of timestamp. No follow-up is sent automatically.",
+    "example": {
+      "asOf": "2026-09-05T12:00:00Z",
+      "commitments": [
+        {
+          "id": "action-1",
+          "owner": "Example owner",
+          "dueAt": "2026-09-04T12:00:00Z",
+          "status": "open"
+        }
+      ]
+    }
+  }
+]

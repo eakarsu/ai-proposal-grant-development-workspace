@@ -124,21 +124,21 @@ export const entities: Record<string, EntityConfig> = {
 export const workflows: WorkflowConfig[] = [
   {
     slug: "go-no-go",
-    title: "Go / No-Go Analyst",
+    title: "Draft: Go / No-Go Analyst",
     description: "Assess whether to pursue the opportunity.",
     prompt: "You are a capture manager. Recommend go/no-go: mission fit, eligibility, competitiveness, cost of pursuit, and readiness against the deadline.",
     fields: ["funder", "program", "awardCeiling", "currentCapabilities"],
   },
   {
     slug: "section-draft",
-    title: "Section Drafter",
+    title: "Draft: Section Drafter",
     description: "Draft a proposal section from sources.",
     prompt: "You are a grant writer. Draft the proposal section using ONLY approved source documents; add bracketed citations for each claim.",
     fields: ["section", "requirements", "sourceSummaries", "pageLimit"],
   },
   {
     slug: "claim-audit",
-    title: "Claim Auditor",
+    title: "Draft: Claim Auditor",
     description: "Validate claims against approved sources.",
     prompt: "You are a compliance auditor. Check each claim in the draft against the approved sources; flag unsupported or overstated claims.",
     fields: ["draftText", "approvedSources", "strictness"],

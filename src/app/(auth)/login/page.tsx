@@ -14,28 +14,17 @@ export default function LoginPage() {
   const [error, setError] = useState("");
   const [pending, setPending] = useState(false);
 
-  function fillDemo() {
-    setEmail("admin@ai-proposal-grant-development-workspace.local");
-    setPassword("Demo!23456");
-    setError("");
-  }
 
   async function onSubmit(event: React.FormEvent) {
     event.preventDefault();
     setPending(true);
     setError("");
-    const result = await signIn("credentials", {
-      redirect: false,
-      email,
-      password,
-    });
-    setPending(false);
-    if (result?.error) {
-      setError("Invalid email or password.");
-      return;
-    }
-    router.push("/dashboard");
-    router.refresh();
+    try {
+      const result = await signIn("credentials", {redirect: false, email, password});
+      if (!result || result.error) { setError("Invalid email or password."); return; }
+      router.push("/dashboard"); router.refresh();
+    } catch { setError("Sign-in service unavailable. Retry shortly."); }
+    finally { setPending(false); }
   }
 
   return (
@@ -53,7 +42,7 @@ export default function LoginPage() {
         >
           <h2 className="text-lg font-semibold text-slate-900">Sign in</h2>
           <p className="mt-1 text-sm text-slate-500">
-            Access the provisioned demonstration workspace.
+            Sign in with an account provisioned by your administrator.
           </p>
           <div className="mt-6 space-y-4">
             <div>
@@ -86,14 +75,7 @@ export default function LoginPage() {
             <Button type="submit" className="w-full" disabled={pending}>
               {pending ? "Signing in..." : "Sign in securely"}
             </Button>
-            <Button
-              type="button"
-              variant="outline"
-              className="w-full"
-              onClick={fillDemo}
-            >
-              Auto Fill Demo Credentials
-            </Button>
+
           </div>
         </form>
       </div>

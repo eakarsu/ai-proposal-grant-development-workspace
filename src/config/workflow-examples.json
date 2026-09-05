@@ -1,0 +1,95 @@
+{
+  "go-no-go": [
+    {
+      "id": "example-1",
+      "label": "Workforce pilot",
+      "values": {
+        "funder": "Example Foundation A",
+        "program": "Digital workforce pilot",
+        "awardCeiling": "250000 USD",
+        "currentCapabilities": "Fictional team: training delivery, evaluation partner and two employer contacts."
+      }
+    },
+    {
+      "id": "example-2",
+      "label": "Community learning",
+      "values": {
+        "funder": "Example Foundation B",
+        "program": "Community learning access",
+        "awardCeiling": "100000 USD",
+        "currentCapabilities": "Fictional team: established venue, volunteer mentors; matching funds not confirmed."
+      }
+    },
+    {
+      "id": "example-3",
+      "label": "Capacity constraint",
+      "values": {
+        "funder": "Example Public Program C",
+        "program": "Regional skills expansion",
+        "awardCeiling": "1000000 USD",
+        "currentCapabilities": "Fictional team lacks audited multi-site delivery evidence and required partner commitments."
+      }
+    }
+  ],
+  "section-draft": [
+    {
+      "id": "example-1",
+      "label": "Needs statement",
+      "values": {
+        "section": "Needs statement",
+        "requirements": "Describe the problem, target population and measurable baseline.",
+        "sourceSummaries": "Example source summary: an approved survey describes access barriers. Select the actual approved artifact; do not invent findings.",
+        "pageLimit": "2 pages"
+      }
+    },
+    {
+      "id": "example-2",
+      "label": "Delivery approach",
+      "values": {
+        "section": "Delivery approach",
+        "requirements": "Explain activities, staffing, milestones and accessibility.",
+        "sourceSummaries": "Example source summary: a reviewed implementation plan lists staff roles and milestones. Select approved source text.",
+        "pageLimit": "3 pages"
+      }
+    },
+    {
+      "id": "example-3",
+      "label": "Evaluation plan",
+      "values": {
+        "section": "Evaluation plan",
+        "requirements": "Define measures, collection methods and review schedule.",
+        "sourceSummaries": "Example source summary: an approved evaluation plan defines attendance and completion measures; effect sizes are not established.",
+        "pageLimit": "1 page"
+      }
+    }
+  ],
+  "claim-audit": [
+    {
+      "id": "example-1",
+      "label": "Unsupported number",
+      "values": {
+        "draftText": "Example draft: Our program improved completion by 35 percent.",
+        "approvedSources": "Select an approved source artifact containing the underlying measurements; none are established by this sample.",
+        "strictness": "Strict: flag unsupported quantitative and causal claims."
+      }
+    },
+    {
+      "id": "example-2",
+      "label": "Scope overstatement",
+      "values": {
+        "draftText": "Example draft: The pilot demonstrates success for every participant group.",
+        "approvedSources": "Select approved pilot findings and subgroup coverage; summaries alone are insufficient.",
+        "strictness": "Strict: distinguish observed sample results from generalization."
+      }
+    },
+    {
+      "id": "example-3",
+      "label": "Citation check",
+      "values": {
+        "draftText": "Example draft: The reviewed plan schedules two workshops per month.",
+        "approvedSources": "Select the actual independently approved plan containing the workshop schedule.",
+        "strictness": "Check every factual claim against a verbatim source excerpt."
+      }
+    }
+  ]
+}

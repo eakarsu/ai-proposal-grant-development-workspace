@@ -1,0 +1,536 @@
+{
+  "Opportunity": {
+    "name": "Opportunity",
+    "fields": [
+      {
+        "name": "name",
+        "kind": "string",
+        "required": true
+      },
+      {
+        "name": "funder",
+        "kind": "string",
+        "required": true
+      },
+      {
+        "name": "program",
+        "kind": "string",
+        "required": true
+      },
+      {
+        "name": "awardCeiling",
+        "kind": "number",
+        "required": true
+      },
+      {
+        "name": "status",
+        "kind": "string",
+        "required": true
+      },
+      {
+        "name": "deadline",
+        "kind": "date",
+        "required": false
+      }
+    ]
+  },
+  "Proposal": {
+    "name": "Proposal",
+    "fields": [
+      {
+        "name": "title",
+        "kind": "string",
+        "required": true
+      },
+      {
+        "name": "opportunityRef",
+        "kind": "string",
+        "required": true
+      },
+      {
+        "name": "lead",
+        "kind": "string",
+        "required": true
+      },
+      {
+        "name": "requestedAmount",
+        "kind": "number",
+        "required": true,
+        "min": 0
+      },
+      {
+        "name": "status",
+        "kind": "string",
+        "required": true
+      },
+      {
+        "name": "dueDate",
+        "kind": "date",
+        "required": false
+      },
+      {
+        "name": "opportunityId",
+        "kind": "string",
+        "required": false,
+        "relation": "Opportunity"
+      }
+    ],
+    "parent": {
+      "field": "opportunityId",
+      "entity": "Opportunity"
+    }
+  },
+  "RequirementItem": {
+    "name": "RequirementItem",
+    "fields": [
+      {
+        "name": "section",
+        "kind": "string",
+        "required": true
+      },
+      {
+        "name": "requirement",
+        "kind": "string",
+        "required": true
+      },
+      {
+        "name": "responseRef",
+        "kind": "string",
+        "required": true
+      },
+      {
+        "name": "status",
+        "kind": "string",
+        "required": true
+      },
+      {
+        "name": "owner",
+        "kind": "string",
+        "required": true
+      },
+      {
+        "name": "pageLimit",
+        "kind": "string",
+        "required": false
+      },
+      {
+        "name": "opportunityId",
+        "kind": "string",
+        "required": false,
+        "relation": "Opportunity"
+      }
+    ],
+    "parent": {
+      "field": "opportunityId",
+      "entity": "Opportunity"
+    }
+  },
+  "SourceDocument": {
+    "name": "SourceDocument",
+    "fields": [
+      {
+        "name": "title",
+        "kind": "string",
+        "required": true
+      },
+      {
+        "name": "kind",
+        "kind": "string",
+        "required": true
+      },
+      {
+        "name": "storageRef",
+        "kind": "string",
+        "required": true
+      },
+      {
+        "name": "approvedBy",
+        "kind": "string",
+        "required": true
+      },
+      {
+        "name": "status",
+        "kind": "string",
+        "required": true
+      },
+      {
+        "name": "ingestedAt",
+        "kind": "date",
+        "required": false
+      },
+      {
+        "name": "opportunityId",
+        "kind": "string",
+        "required": false,
+        "relation": "Opportunity"
+      }
+    ],
+    "parent": {
+      "field": "opportunityId",
+      "entity": "Opportunity"
+    }
+  },
+  "ClaimValidation": {
+    "name": "ClaimValidation",
+    "fields": [
+      {
+        "name": "claim",
+        "kind": "string",
+        "required": true
+      },
+      {
+        "name": "sourceRef",
+        "kind": "string",
+        "required": true
+      },
+      {
+        "name": "verdict",
+        "kind": "string",
+        "required": true
+      },
+      {
+        "name": "reviewer",
+        "kind": "string",
+        "required": true
+      },
+      {
+        "name": "status",
+        "kind": "string",
+        "required": true
+      },
+      {
+        "name": "checkedAt",
+        "kind": "date",
+        "required": false
+      },
+      {
+        "name": "opportunityId",
+        "kind": "string",
+        "required": false,
+        "relation": "Opportunity"
+      }
+    ],
+    "parent": {
+      "field": "opportunityId",
+      "entity": "Opportunity"
+    }
+  },
+  "BudgetLine": {
+    "name": "BudgetLine",
+    "fields": [
+      {
+        "name": "category",
+        "kind": "string",
+        "required": true
+      },
+      {
+        "name": "description",
+        "kind": "string",
+        "required": true
+      },
+      {
+        "name": "amount",
+        "kind": "number",
+        "required": true,
+        "min": 0
+      },
+      {
+        "name": "justification",
+        "kind": "string",
+        "required": true
+      },
+      {
+        "name": "status",
+        "kind": "string",
+        "required": true
+      },
+      {
+        "name": "allowability",
+        "kind": "string",
+        "required": true
+      },
+      {
+        "name": "opportunityId",
+        "kind": "string",
+        "required": false,
+        "relation": "Opportunity"
+      }
+    ],
+    "parent": {
+      "field": "opportunityId",
+      "entity": "Opportunity"
+    }
+  },
+  "ReviewerAssignment": {
+    "name": "ReviewerAssignment",
+    "fields": [
+      {
+        "name": "reviewer",
+        "kind": "string",
+        "required": true
+      },
+      {
+        "name": "section",
+        "kind": "string",
+        "required": true
+      },
+      {
+        "name": "expertise",
+        "kind": "string",
+        "required": true
+      },
+      {
+        "name": "status",
+        "kind": "string",
+        "required": true
+      },
+      {
+        "name": "dueDate",
+        "kind": "date",
+        "required": false
+      },
+      {
+        "name": "feedbackRef",
+        "kind": "string",
+        "required": false
+      },
+      {
+        "name": "opportunityId",
+        "kind": "string",
+        "required": false,
+        "relation": "Opportunity"
+      }
+    ],
+    "parent": {
+      "field": "opportunityId",
+      "entity": "Opportunity"
+    }
+  },
+  "DeadlineItem": {
+    "name": "DeadlineItem",
+    "fields": [
+      {
+        "name": "kind",
+        "kind": "string",
+        "required": true
+      },
+      {
+        "name": "title",
+        "kind": "string",
+        "required": true
+      },
+      {
+        "name": "dueAt",
+        "kind": "date",
+        "required": false
+      },
+      {
+        "name": "owner",
+        "kind": "string",
+        "required": true
+      },
+      {
+        "name": "status",
+        "kind": "string",
+        "required": true
+      },
+      {
+        "name": "consequence",
+        "kind": "string",
+        "required": false
+      },
+      {
+        "name": "opportunityId",
+        "kind": "string",
+        "required": false,
+        "relation": "Opportunity"
+      }
+    ],
+    "parent": {
+      "field": "opportunityId",
+      "entity": "Opportunity"
+    }
+  },
+  "DraftSection": {
+    "name": "DraftSection",
+    "fields": [
+      {
+        "name": "section",
+        "kind": "string",
+        "required": true
+      },
+      {
+        "name": "content",
+        "kind": "string",
+        "required": true
+      },
+      {
+        "name": "version",
+        "kind": "string",
+        "required": true
+      },
+      {
+        "name": "author",
+        "kind": "string",
+        "required": true
+      },
+      {
+        "name": "status",
+        "kind": "string",
+        "required": true
+      },
+      {
+        "name": "lastEditedAt",
+        "kind": "date",
+        "required": false
+      },
+      {
+        "name": "opportunityId",
+        "kind": "string",
+        "required": false,
+        "relation": "Opportunity"
+      }
+    ],
+    "parent": {
+      "field": "opportunityId",
+      "entity": "Opportunity"
+    }
+  },
+  "MeetingExtract": {
+    "name": "MeetingExtract",
+    "fields": [
+      {
+        "name": "meeting",
+        "kind": "string",
+        "required": true
+      },
+      {
+        "name": "keyPoints",
+        "kind": "string",
+        "required": true
+      },
+      {
+        "name": "decisions",
+        "kind": "string",
+        "required": true
+      },
+      {
+        "name": "actions",
+        "kind": "string",
+        "required": true
+      },
+      {
+        "name": "status",
+        "kind": "string",
+        "required": true
+      },
+      {
+        "name": "heldAt",
+        "kind": "date",
+        "required": false
+      },
+      {
+        "name": "opportunityId",
+        "kind": "string",
+        "required": false,
+        "relation": "Opportunity"
+      }
+    ],
+    "parent": {
+      "field": "opportunityId",
+      "entity": "Opportunity"
+    }
+  },
+  "SubmissionPackage": {
+    "name": "SubmissionPackage",
+    "fields": [
+      {
+        "name": "portal",
+        "kind": "string",
+        "required": true
+      },
+      {
+        "name": "packageRef",
+        "kind": "string",
+        "required": true
+      },
+      {
+        "name": "status",
+        "kind": "string",
+        "required": true
+      },
+      {
+        "name": "submittedAt",
+        "kind": "date",
+        "required": false
+      },
+      {
+        "name": "confirmation",
+        "kind": "string",
+        "required": false
+      },
+      {
+        "name": "pageCount",
+        "kind": "number",
+        "required": true,
+        "integer": true,
+        "min": 0
+      },
+      {
+        "name": "opportunityId",
+        "kind": "string",
+        "required": false,
+        "relation": "Opportunity"
+      }
+    ],
+    "parent": {
+      "field": "opportunityId",
+      "entity": "Opportunity"
+    }
+  },
+  "ComplianceCheck": {
+    "name": "ComplianceCheck",
+    "fields": [
+      {
+        "name": "rule",
+        "kind": "string",
+        "required": true
+      },
+      {
+        "name": "result",
+        "kind": "string",
+        "required": true
+      },
+      {
+        "name": "evidence",
+        "kind": "string",
+        "required": true
+      },
+      {
+        "name": "reviewer",
+        "kind": "string",
+        "required": true
+      },
+      {
+        "name": "status",
+        "kind": "string",
+        "required": true
+      },
+      {
+        "name": "checkedAt",
+        "kind": "date",
+        "required": false
+      },
+      {
+        "name": "opportunityId",
+        "kind": "string",
+        "required": false,
+        "relation": "Opportunity"
+      }
+    ],
+    "parent": {
+      "field": "opportunityId",
+      "entity": "Opportunity"
+    }
+  }
+}

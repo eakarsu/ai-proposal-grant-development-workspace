@@ -16,7 +16,7 @@ if [ ! -d node_modules ]; then
 fi
 
 if [ -n "${DATABASE_URL:-}" ]; then
-  npx prisma migrate deploy 2>/dev/null || npx prisma migrate dev --name init || true
+  npx prisma migrate deploy
 else
   echo "DATABASE_URL is not set. Copy .env.example to .env first." >&2
   exit 1

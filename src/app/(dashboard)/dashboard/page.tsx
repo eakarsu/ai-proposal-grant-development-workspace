@@ -17,22 +17,26 @@ function workflowPage(slug: string): string {
 
 export default function DashboardPage() {
   const [metrics, setMetrics] = useState<Metric[]>([]);
+  const [error, setError] = useState("");
 
   useEffect(() => {
     fetch("/api/metrics")
-      .then((r) => r.json())
+      .then(async r => { if (!r.ok) throw new Error("Metrics unavailable; retry later."); return r.json(); })
       .then((d) => setMetrics(d.metrics ?? []))
-      .catch(() => setMetrics([]));
+      .catch(e => setError(e.message));
   }, []);
 
   return (
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold text-slate-900">Dashboard</h1>
+        <Link className="block py-2 underline" href="/users">Administrator: workspace accounts</Link>
+        <Link className="block py-3 font-semibold underline" href="/tools">Open domain calculations and evidence tools</Link>
         <p className="text-sm text-slate-500">
-          Live operational overview across all domains.
+          Stored record counts. Open domain tools for calculated measures.
         </p>
       </div>
+      {error ? <p role="alert">{error}</p> : null}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
         {metrics.map((m) => (
           <Card key={m.label}>
