@@ -17,7 +17,8 @@
     "demo-data:load": "node scripts/load-demo-data.cjs",
     "demo-data:verify": "node scripts/load-demo-data.cjs --verify",
     "test:grants:isolated": "node scripts/test-grants-isolated.cjs",
-    "test:restore": "node scripts/verify-restore.cjs"
+    "test:restore": "node scripts/verify-restore.cjs",
+    "test:startup": "node scripts/test-port-cleanup.cjs"
   },
   "prisma": {
     "seed": "tsx --env-file=.env prisma/seed.ts"

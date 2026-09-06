@@ -2,7 +2,7 @@
 
 import { signIn } from "next-auth/react";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -13,7 +13,27 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [pending, setPending] = useState(false);
+  const [demoEnabled, setDemoEnabled] = useState(false);
+  const [demoLoading, setDemoLoading] = useState(false);
 
+  useEffect(() => {
+    const controller = new AbortController();
+    fetch('/api/auth/demo-credentials?status=1', { cache: 'no-store', signal: controller.signal })
+      .then(async response => response.ok ? response.json() : { enabled: false })
+      .then(result => setDemoEnabled(result.enabled === true)).catch(() => {});
+    return () => controller.abort();
+  }, []);
+
+  async function fillDemoCredentials() {
+    setDemoLoading(true); setError('');
+    try {
+      const response = await fetch('/api/auth/demo-credentials', { cache: 'no-store' });
+      const credentials = await response.json();
+      if (!response.ok || !credentials.enabled || !credentials.email || !credentials.password) throw new Error('Local autofill is unavailable.');
+      setEmail(credentials.email); setPassword(credentials.password);
+    } catch { setError('Could not load local credentials. Please try again.'); }
+    finally { setDemoLoading(false); }
+  }
 
   async function onSubmit(event: React.FormEvent) {
     event.preventDefault();
@@ -72,7 +92,10 @@ export default function LoginPage() {
                 {error}
               </p>
             ) : null}
-            <Button type="submit" className="w-full" disabled={pending}>
+            {demoEnabled && <Button type="button" variant="outline" className="w-full" onClick={fillDemoCredentials} disabled={pending || demoLoading} aria-label="Auto Fill Demo Credentials">
+              {demoLoading ? 'Filling credentials…' : 'Auto Fill Demo Credentials'}
+            </Button>}
+            <Button type="submit" className="w-full" disabled={pending || demoLoading}>
               {pending ? "Signing in..." : "Sign in securely"}
             </Button>
 

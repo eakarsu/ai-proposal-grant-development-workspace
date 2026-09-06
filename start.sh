@@ -11,6 +11,8 @@ if [ -f .env ]; then
   set -a; source .env; set +a
 fi
 
+node scripts/clear-project-ports.cjs "${PORT:-4629}"
+
 if [ ! -d node_modules ]; then
   npm install
 fi

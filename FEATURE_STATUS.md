@@ -161,3 +161,7 @@ Validation: **21 unit tests, seven PostgreSQL integration scenarios and 46 legac
 The original checklist is still not fully implemented. Major remaining areas include opportunity feeds/saved searches/alerts, reusable approved templates/narratives, richer editing/autosave, further AI and audio workflows, post-award deliverables/spending/reporting, external connectors, retention and broader release acceptance.
 
 Migration `20260906020000_document_versions` was applied after private backup `~/.codex/backups/ai-proposal-grant-development-workspace/before-document-controls-1788725930815.dump`. A fresh full restore rehearsal after this migration passed (38 public tables, 70 constraints, zero invalid indexes; every table readable). The local server restarted and fresh authenticated grant API/page smoke checks passed.
+
+### September 6 — local startup and autofill follow-up
+
+`start.sh` releases existing listeners owned by this project before migrations or builds, including the prior server process tree. It validates all port owners first and preserves unrelated applications. `npm run test:startup` passed for this project; a real repeated HomeServices startup also released both occupied ports and restarted successfully. Local autofill and authenticated browser login were verified across all five apps without changing account passwords. Local `.env` opt-ins and credentials remain untracked.
