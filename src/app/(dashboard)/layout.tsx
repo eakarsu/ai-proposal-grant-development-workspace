@@ -11,15 +11,15 @@ export default function DashboardLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const { status } = useSession();
+  const { status,data:session } = useSession();
   const router = useRouter();
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   useEffect(() => {
-    if (status === "unauthenticated") {
+    if (status === "unauthenticated" || session?.invalid) {
       router.push("/login");
     }
-  }, [status, router]);
+  }, [status,session?.invalid, router]);
 
   if (status === "loading") {
     return (
@@ -29,7 +29,7 @@ export default function DashboardLayout({
     );
   }
 
-  if (status === "unauthenticated") {
+  if (status === "unauthenticated" || session?.invalid) {
     return null;
   }
 

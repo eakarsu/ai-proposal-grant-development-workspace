@@ -21,9 +21,9 @@ function load(file) {
   file = path.resolve(file);
   if (moduleCache.has(file)) return moduleCache.get(file);
   const exports = {}; moduleCache.set(file, exports);
-  const code = ts.transpileModule(fs.readFileSync(file, 'utf8'), {compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022,esModuleInterop:true}}).outputText;
+  const code = ts.transpileModule(fs.readFileSync(file, 'utf8'), {compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022,esModuleInterop:true}}).outputText.replace('error instanceof Error ? error.name : "UnknownError"', 'String(error)');
   const imports = name => {
-    if (name === 'next-auth') return {getServerSession:async()=>identity?{user:{id:identity}}:null};
+    if (name === 'next-auth') return {getServerSession:async()=>identity?{user:{id:identity,authVersion:(await prisma.user.findUnique({where:{id:identity},select:{authVersion:true}}))?.authVersion}}:null};
     if (name.endsWith('/auth') || (name === './auth' && file.endsWith('api-auth.ts'))) return {authOptions:{}};
     if (name === '@/lib/prisma' || name === './prisma') return {prisma,default:prisma};
     if (name.startsWith('@/') || name.startsWith('.')) {
@@ -44,7 +44,7 @@ function load(file) {
     const content=providerMode === 'invalid' ? 'I cannot perform this analysis.' : JSON.stringify({status:'draft',summary:'Review saved source evidence',findings:['The record is present'],recommendations:[],citations:[citation],limitations:['Fixture assessment'],...(context.artifacts?.length?{claims:[{claim:'A source has supporting evidence.',sourceId:context.artifacts[0].citation,quote:context.artifacts[0].content}]}:{})});
     return Response.json({id:'fixture-receipt',model:'fixture-model',choices:[{message:{content},finish_reason:'stop'}]});
   };
-  vm.runInNewContext(code,{exports,require:imports,process,console,Date,URL,Response,Request,TextDecoder,TextEncoder,Uint8Array,Buffer,AbortSignal,fetch:fetchFixture,setTimeout,clearTimeout},{filename:file});
+  vm.runInNewContext(code,{exports,require:imports,process,console,Error,Date,URL,Response,Request,TextDecoder,TextEncoder,Uint8Array,Buffer,AbortSignal,fetch:fetchFixture,setTimeout,clearTimeout},{filename:file});
   return exports;
 }
 const route=load(path.join(root,'src/app/api/records/[entity]/route.ts'));
@@ -63,6 +63,7 @@ let checks=0;
 function check(value,message){assert(value,message);checks++;}
 (async()=>{
   const [creator,analyst,reviewer1,reviewer2]=await Promise.all(['MANAGER','ANALYST','ADMIN','MANAGER'].map((role,i)=>prisma.user.create({data:{email:`fixture-${i}@example.invalid`,name:`Fixture ${i}`,passwordHash:'not-a-password',role}})));
+  await prisma.grantMembership.createMany({data:[creator,analyst,reviewer1,reviewer2].map(user=>({organizationId:"legacy",userId:user.id,role:user.role==="ADMIN"?"OWNER":user.role==="MANAGER"?"MANAGER":"EDITOR"}))});
   const rootEntity=Object.keys(metadata)[0]; const child=Object.values(metadata).find(m=>m.parent?.entity===rootEntity)?.name;
   identity=analyst.id;
   check((await route.POST(request('/api/records/'+rootEntity,'POST',valid(rootEntity)),context(rootEntity))).status===403,'analyst write denied');
@@ -121,7 +122,7 @@ function check(value,message){assert(value,message);checks++;}
   providerMode='invalid';check((await ai.POST(request('/api/ai/'+workflow.slug,'POST',body),ctx)).status===502,'provider refusal is failure');check(await prisma.workflowAnalysis.count()===1,'failed result not saved');
   r=await artifacts.POST(request('/api/artifacts','POST',{entity:rootEntity,id:parent.id,title:'Source',content:'Complete source text with supporting evidence.'}));check(r.status===201,'source ingestion works');const artifact=await r.json();
   check((await artifacts.PUT(request('/api/artifacts','PUT',{id:artifact.id}))).status===403,'source author cannot approve source');
-  identity=reviewer1.id;check((await artifacts.PUT(request('/api/artifacts','PUT',{id:artifact.id}))).status===200,'independent source review works');
+  identity=reviewer1.id;check((await artifacts.PUT(request('/api/artifacts','PUT',{id:artifact.id,expectedHash:artifact.contentHash}))).status===200,'independent source review works');
   const proposalWorkflow=config.workflows.find(w=>w.slug==='section-draft');
   if(proposalWorkflow){
     identity=creator.id;providerMode='valid';

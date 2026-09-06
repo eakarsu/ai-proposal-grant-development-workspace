@@ -65,11 +65,17 @@ export const authOptions: NextAuthOptions = {
       if (user) {
         token.id = user.id;
         token.role = user.role;
+        const current=await prisma.user.findUnique({where:{id:user.id},select:{authVersion:true}});token.authVersion=current?.authVersion;
       }
+      const current=token.id?await prisma.user.findUnique({where:{id:token.id},select:{role:true,active:true,authVersion:true}}):null;
+      token.invalid=!current?.active || current.authVersion!==token.authVersion;
+      if(current)token.role=current.role;
       return token;
     },
     async session({ session, token }) {
+      session.invalid=token.invalid;
       if (session.user) {
+        session.user.authVersion=token.authVersion;
         session.user.id = String(token.id ?? "");
         session.user.role = String(token.role ?? "ANALYST");
       }

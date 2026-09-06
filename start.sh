@@ -16,10 +16,13 @@ if [ ! -d node_modules ]; then
 fi
 
 if [ -n "${DATABASE_URL:-}" ]; then
+  npx prisma generate
   npx prisma migrate deploy
 else
   echo "DATABASE_URL is not set. Copy .env.example to .env first." >&2
   exit 1
 fi
+
+if [[ "${LOAD_DEMO_DATA:-false}" == true ]]; then npm run demo-data:load; fi
 
 exec npm run dev

@@ -22,7 +22,7 @@ export default function LoginPage() {
     try {
       const result = await signIn("credentials", {redirect: false, email, password});
       if (!result || result.error) { setError("Invalid email or password."); return; }
-      router.push("/dashboard"); router.refresh();
+      router.push("/projects"); router.refresh();
     } catch { setError("Sign-in service unavailable. Retry shortly."); }
     finally { setPending(false); }
   }

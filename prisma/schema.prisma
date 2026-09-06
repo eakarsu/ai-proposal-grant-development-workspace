@@ -9,6 +9,7 @@ datasource db {
 }
 
 model User {
+  authVersion Int @default(1)
   active       Boolean @default(true)
   id           String   @id @default(cuid())
   email        String   @unique
@@ -308,4 +309,203 @@ model SessionMedia {
  contentHash String
  createdAt DateTime @default(now())
  @@index([sessionId])
+}
+
+model GrantOrganization {
+ id String @id @default(cuid())
+ name String
+ profile String @default("")
+ timezone String @default("America/New_York")
+ reviewCount Int @default(2)
+ version Int @default(1)
+ createdAt DateTime @default(now())
+ memberships GrantMembership[]
+ projects GrantProject[]
+ invites GrantInvitation[]
+}
+model GrantMembership {
+ id String @id @default(cuid())
+ organizationId String
+ organization GrantOrganization @relation(fields:[organizationId],references:[id])
+ userId String
+ role String
+ active Boolean @default(true)
+ createdAt DateTime @default(now())
+ @@unique([organizationId,userId])
+ @@index([userId,active])
+}
+model GrantInvitation {
+ id String @id @default(cuid())
+ organizationId String
+ organization GrantOrganization @relation(fields:[organizationId],references:[id])
+ email String
+ role String
+ projectId String?
+ tokenHash String @unique
+ invitedBy String
+ expiresAt DateTime
+ acceptedAt DateTime?
+ revokedAt DateTime?
+ createdAt DateTime @default(now())
+}
+model GrantProject {
+ aiDrafts GrantAiDraft[]
+ id String @id @default(cuid())
+ organizationId String
+ organization GrantOrganization @relation(fields:[organizationId],references:[id])
+ title String
+ funder String
+ program String @default("")
+ dueAt DateTime?
+ currency String @default("USD")
+ status String @default("DRAFT")
+ version Int @default(1)
+ authorId String
+ document Json
+ createdAt DateTime @default(now())
+ updatedAt DateTime @updatedAt
+ access GrantProjectAccess[]
+ sources GrantSource[]
+ revisions GrantRevision[]
+ reviews GrantReview[]
+ packages GrantPackage[]
+ comments GrantComment[]
+ @@index([organizationId,status,dueAt])
+}
+model GrantProjectAccess {
+ id String @id @default(cuid())
+ projectId String
+ project GrantProject @relation(fields:[projectId],references:[id])
+ userId String
+ @@unique([projectId,userId])
+}
+model GrantSource {
+ id String @id @default(cuid())
+ projectId String
+ project GrantProject @relation(fields:[projectId],references:[id])
+ title String
+ fileName String
+ mediaType String
+ bytes Bytes?
+ contentHash String
+ chunks Json
+ actorId String
+ approvedBy String?
+ approvedAt DateTime?
+ supersedesId String? @unique
+ createdAt DateTime @default(now())
+ @@index([projectId,createdAt])
+}
+model GrantRevision {
+ id String @id @default(cuid())
+ projectId String
+ project GrantProject @relation(fields:[projectId],references:[id])
+ version Int
+ snapshot Json
+ contentHash String
+ actorId String
+ reason String
+ createdAt DateTime @default(now())
+ @@unique([projectId,version])
+}
+model GrantReview {
+ id String @id @default(cuid())
+ projectId String
+ project GrantProject @relation(fields:[projectId],references:[id])
+ reviewerId String
+ contentHash String
+ approved Boolean
+ reason String
+ createdAt DateTime @default(now())
+ @@unique([projectId,contentHash,reviewerId])
+}
+model GrantPackage {
+ id String @id @default(cuid())
+ projectId String
+ project GrantProject @relation(fields:[projectId],references:[id])
+ projectVersion Int
+ contentHash String
+ manifest Json
+ docx Bytes
+ pdf Bytes
+ archive Bytes
+ frozenBy String
+ submittedAt DateTime?
+ receiptReference String?
+ receiptBytes Bytes?
+ receiptHash String?
+ createdAt DateTime @default(now())
+ @@unique([projectId,projectVersion])
+}
+model GrantComment {
+ id String @id @default(cuid())
+ projectId String
+ project GrantProject @relation(fields:[projectId],references:[id])
+ actorId String
+ body String
+ taskId String?
+ createdAt DateTime @default(now())
+ @@index([projectId,createdAt])
+}
+model GrantMutation {
+ id String @id
+ actorId String
+ organizationId String
+ action String
+ inputHash String
+ response Json
+ createdAt DateTime @default(now())
+}
+model GrantNotification {
+ id String @id @default(cuid())
+ userId String
+ organizationId String
+ projectId String?
+ title String
+ readAt DateTime?
+ createdAt DateTime @default(now())
+ @@index([userId,readAt,createdAt])
+}
+
+model GrantAiDraft {
+ id String @id @default(cuid())
+ organizationId String
+ projectId String
+ project GrantProject @relation(fields:[projectId],references:[id])
+ actorId String
+ task String
+ sectionId String?
+ instructions String
+ baseVersion Int
+ sourceSnapshot Json
+ sourceHash String
+ status String @default("PENDING")
+ output Json?
+ providerRef String?
+ model String?
+ inputTokens Int?
+ outputTokens Int?
+ costUsd Decimal? @db.Decimal(12,6)
+ error String?
+ reviewedById String?
+ reviewNotes String?
+ appliedVersion Int?
+ createdAt DateTime @default(now())
+ updatedAt DateTime @updatedAt
+ @@index([organizationId,createdAt])
+ @@index([projectId,status])
+}
+
+model GrantSubmissionReceipt {
+ id String @id @default(cuid())
+ projectId String
+ packageId String
+ actorId String
+ fileName String
+ mediaType String
+ bytes Bytes
+ contentHash String
+ note String
+ createdAt DateTime @default(now())
+ @@index([projectId,packageId,createdAt])
 }
