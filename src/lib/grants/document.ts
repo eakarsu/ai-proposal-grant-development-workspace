@@ -172,6 +172,15 @@ export function calculateBudget(document: GrantDocument) {
 export const wordCount = (text: string) =>
   text.trim() ? text.trim().split(/\s+/u).length : 0;
 export type SourceChunk = { id: string; label: string; text: string };
+// Match the quote only when it is bounded by non-word characters, so a
+// fragment like "rogram served 2" cannot satisfy a citation inside "program".
+function quoteCovered(text: string, quote: string) {
+  const escaped = quote.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
+  return new RegExp(
+    `(?<![\\p{L}\\p{N}])${escaped}(?![\\p{L}\\p{N}])`,
+    "u",
+  ).test(text);
+}
 export function validateCitations(
   document: GrantDocument,
   sources: { id: string; approvedBy: string | null; chunks: unknown }[],
@@ -188,8 +197,19 @@ export function validateCitations(
     const source = sources.find((s) => s.id === cite.sourceId),
       chunk = (source?.chunks as SourceChunk[] | undefined)?.find(
         (c) => c.id === cite.chunkId,
-      );
-    if (!chunk || !chunk.text.includes(cite.quote))
+      ),
+      quote = cite.quote.trim();
+    // A citation must be a meaningful passage, not a 1-2 character fragment
+    // that trivially appears somewhere in the source.
+    const quoteTokens = quote
+      .split(/\s+/u)
+      .filter((token) => /[\p{L}\p{N}]/u.test(token));
+    if (
+      quote.length < 10 ||
+      quoteTokens.length < 2 ||
+      !chunk ||
+      !quoteCovered(chunk.text, quote)
+    )
       throw new RequestError(
         "A citation is missing or its quoted passage is not present in the source",
         409,

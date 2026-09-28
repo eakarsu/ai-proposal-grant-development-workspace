@@ -49,6 +49,7 @@ export const draftOutput = z
     limitations: z.array(z.string().min(1).max(2000)).min(1).max(20),
   })
   .strict();
+class DraftOutputError extends Error {}
 export async function approvedSources(
   tx: Prisma.TransactionClient,
   actorId: string,
@@ -268,6 +269,7 @@ export async function generateGrantDraft(
     outputTokens?: number;
     costUsd?: number;
   } = {};
+  let providerOutput: string | null = null;
   try {
     const response = await fetcher(
       "https://openrouter.ai/api/v1/chat/completions",
@@ -344,26 +346,45 @@ export async function generateGrantDraft(
       payload.choices?.[0]?.message?.refusal
     )
       throw Error("Provider did not return a complete draft receipt");
-    const output = validateDraft(
-      JSON.parse(payload.choices[0].message.content),
-      sources,
-      ["DRAFT_SECTION", "REWRITE_SECTION"].includes(row.task)
-        ? section?.wordLimit
-        : 0,
-    );
+    const content = payload.choices[0].message.content;
+    if (typeof content !== "string" || !content.trim())
+      throw Error("Provider did not return draft content");
+    providerOutput = content;
+    let output: z.infer<typeof draftOutput>;
+    try {
+      output = validateDraft(
+        JSON.parse(content),
+        sources,
+        ["DRAFT_SECTION", "REWRITE_SECTION"].includes(row.task)
+          ? section?.wordLimit
+          : 0,
+      );
+    } catch (error) {
+      throw new DraftOutputError(
+        error instanceof Error ? error.message : "Draft output failed validation",
+      );
+    }
     await projectAccess(prisma, actorId, projectId, editors);
     await prisma.grantAiDraft.updateMany({
       where: { id: row.id, status: "RUNNING" },
       data: { status: "DRAFT", output: jsonValue(output), ...evidence },
     });
-  } catch {
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unknown failure";
+    const explanation = !evidence.providerRef
+      ? "Provider outcome was not confirmed. This request will not automatically be sent again."
+      : error instanceof DraftOutputError
+        ? `The provider returned a draft that failed validation: ${message}. The paid output is retained below; inspect it before another request.`
+        : `The provider output was received but could not be saved: ${message}. The paid output is retained below; resubmitting may be charged again.`;
     await prisma.grantAiDraft.updateMany({
       where: { id: row.id, status: "RUNNING" },
       data: {
         status: evidence.providerRef ? "FAILED" : "UNKNOWN",
-        error: evidence.providerRef
-          ? "The returned draft failed validation. Inspect the receipt and source evidence before another request."
-          : "Provider outcome was not confirmed. This request will not automatically be sent again.",
+        // Keep the paid provider output so a storage/authorization failure is
+        // distinguishable from invalid model output and nothing is silently lost.
+        error: providerOutput
+          ? `${explanation}\n\n--- Provider output ---\n${providerOutput}`
+          : explanation,
         ...evidence,
       },
     });

@@ -9,6 +9,8 @@ export async function GET(_request: Request, context: { params: Promise<{ token:
     const current = await records(prisma, issued.entity).findUnique({ where: { id: issued.entityId } });
     const latest = await prisma.issuedCredential.findFirst({ where: { entity: issued.entity, entityId: issued.entityId }, orderBy: { createdAt: "desc" } });
     const valid = current?.status === "Approved" && latest?.token === token && !issued.revokedAt;
-    return Response.json({ valid, assertion: issued.assertion, issuedAt: issued.createdAt, scope: "Authenticity of this application's human-reviewed credential; not external accreditation" }, { headers: { "Cache-Control": "no-store" } });
+    const scope = "Authenticity of this application's human-reviewed credential; not external accreditation";
+    if (!valid) return Response.json({ valid: false, scope }, { headers: { "Cache-Control": "no-store" } });
+    return Response.json({ valid: true, assertion: issued.assertion, issuedAt: issued.createdAt, scope }, { headers: { "Cache-Control": "no-store" } });
   } catch (error) { return errorResponse(error); }
 }

@@ -292,6 +292,8 @@ test("grant AI drafts cite approved evidence, preserve proposal text until revie
     assert.equal(invalid.status, "FAILED");
     assert.equal(invalid.providerRef, "bad-fixture");
     assert.equal(Number(invalid.costUsd), 0.01);
+    assert.match(invalid.error ?? "", /failed validation/);
+    assert.match(invalid.error ?? "", /Invented result/);
     let unknownCalls = 0;
     const uncertain = (async () => {
         unknownCalls++;
@@ -351,6 +353,51 @@ test("grant AI drafts cite approved evidence, preserve proposal text until revie
       /access/,
     );
     assert.throws(() => validateDraft(output, [source], 3), /word limit/);
+    // A failure after the paid provider call (here: membership revoked while the
+    // draft was in flight) must be distinguishable from invalid model output and
+    // must retain the received provider output.
+    await prisma.grantMembership.update({
+      where: {
+        organizationId_userId: {
+          organizationId: organization.id,
+          userId: reviewer.id,
+        },
+      },
+      data: { active: true },
+    });
+    const revokingProvider = (async () => {
+      await prisma.grantMembership.update({
+        where: {
+          organizationId_userId: {
+            organizationId: organization.id,
+            userId: author.id,
+          },
+        },
+        data: { active: false },
+      });
+      return Response.json({
+        id: "revoked-after-provider",
+        model: "fixture-model",
+        choices: [
+          {
+            finish_reason: "stop",
+            message: { content: JSON.stringify(output) },
+          },
+        ],
+        usage: { cost: 0.02 },
+      });
+    }) as typeof fetch;
+    const unpersisted = await generateGrantDraft(
+      author.id,
+      created.id,
+      randomUUID(),
+      latest,
+      revokingProvider,
+    );
+    assert.equal(unpersisted.status, "FAILED");
+    assert.match(unpersisted.error ?? "", /could not be saved/);
+    assert.match(unpersisted.error ?? "", /240 households/);
+    assert.doesNotMatch(unpersisted.error ?? "", /failed validation/);
   } finally {
     if (previousKey === undefined) delete process.env.OPENROUTER_API_KEY;
     else process.env.OPENROUTER_API_KEY = previousKey;
