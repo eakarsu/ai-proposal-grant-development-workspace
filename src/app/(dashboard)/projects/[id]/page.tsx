@@ -12,6 +12,7 @@ import type { ProposalSnapshot } from "@/lib/grants/export";
 import GrantAiWorkspace from "@/components/GrantAiWorkspace";
 import ReceiptFiles from "@/components/GrantReceiptFiles";
 import CitationEditor from "@/components/GrantCitationEditor";
+import GrantBillingWorkspace from "@/components/GrantBillingWorkspace";
 type Project = {
   id: string;
   organizationId: string;
@@ -348,6 +349,9 @@ export default function ProjectPage({
           "Budget",
           "Sources",
           "AI drafts",
+          ...(["OWNER", "MANAGER", "EDITOR"].includes(view.role)
+            ? ["Client & billing"]
+            : []),
           "Tasks",
           "Reviews & export",
           "Versions",
@@ -366,6 +370,7 @@ export default function ProjectPage({
         ))}
       </nav>
       {tab === "AI drafts" && <GrantAiWorkspace projectId={id} version={view.project.version} sections={view.content.document.sections} sources={view.content.sources} dirty={dirty} onApplied={load}/>}
+      {tab === "Client & billing" && <GrantBillingWorkspace projectId={id} />}
       <fieldset disabled={busy || !editable} className="space-y-4">
         {tab === "Overview" && (
           <div className="bg-white border rounded p-5 space-y-4">

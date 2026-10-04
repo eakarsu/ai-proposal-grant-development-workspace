@@ -322,6 +322,8 @@ model GrantOrganization {
  memberships GrantMembership[]
  projects GrantProject[]
  invites GrantInvitation[]
+ billingClients GrantBillingClient[]
+ portalInvitations GrantClientPortalInvitation[]
 }
 model GrantMembership {
  id String @id @default(cuid())
@@ -370,7 +372,134 @@ model GrantProject {
  reviews GrantReview[]
  packages GrantPackage[]
  comments GrantComment[]
+ engagementQuotes GrantEngagementQuote[]
+ invoiceCandidates GrantInvoiceCandidate[]
+ portalInvitations GrantClientPortalInvitation[]
  @@index([organizationId,status,dueAt])
+ @@unique([id,organizationId])
+}
+
+model GrantBillingClient {
+ id String @id @default(cuid())
+ organizationId String
+ organization GrantOrganization @relation(fields:[organizationId],references:[id])
+ legalName String
+ billingEmail String
+ billingAddress String
+ contactName String
+ createdById String
+ createdAt DateTime @default(now())
+ quotes GrantEngagementQuote[]
+ invoices GrantInvoiceCandidate[]
+ portalInvitations GrantClientPortalInvitation[]
+ @@unique([id,organizationId])
+ @@unique([organizationId,legalName])
+ @@index([organizationId,createdAt])
+}
+
+model GrantEngagementQuote {
+ id String @id @default(cuid())
+ organizationId String
+ projectId String
+ project GrantProject @relation(fields:[projectId,organizationId],references:[id,organizationId])
+ clientId String
+ client GrantBillingClient @relation(fields:[clientId,organizationId],references:[id,organizationId])
+ version Int
+ scope String
+ feeCents Int
+ currency String
+ validUntil DateTime?
+ quoteHash String
+ status String @default("DRAFT")
+ createdById String
+ approvedById String?
+ approvalRationale String?
+ createdAt DateTime @default(now())
+ approvedAt DateTime?
+ invoices GrantInvoiceCandidate[]
+ portalInvitations GrantClientPortalInvitation[]
+ @@unique([id,organizationId])
+ @@unique([id,organizationId,projectId,clientId])
+ @@unique([organizationId,projectId,clientId,version])
+ @@index([organizationId,projectId,status])
+}
+
+model GrantInvoiceCandidate {
+ id String @id @default(cuid())
+ organizationId String
+ projectId String
+ project GrantProject @relation(fields:[projectId,organizationId],references:[id,organizationId])
+ clientId String
+ client GrantBillingClient @relation(fields:[clientId,organizationId],references:[id,organizationId])
+ quoteId String @unique
+ quote GrantEngagementQuote @relation(fields:[quoteId,organizationId,projectId,clientId],references:[id,organizationId,projectId,clientId])
+ amountCents Int
+ currency String
+ quoteHash String
+ status String @default("CANDIDATE")
+ createdById String
+ createdAt DateTime @default(now())
+ voidedById String?
+ voidReason String?
+ voidedAt DateTime?
+ evidence GrantBillingEvidence[]
+ @@unique([id,organizationId])
+ @@index([organizationId,projectId,status])
+}
+
+model GrantBillingEvidence {
+ id String @id @default(cuid())
+ organizationId String
+ invoiceId String
+ invoice GrantInvoiceCandidate @relation(fields:[invoiceId,organizationId],references:[id,organizationId])
+ eventType String
+ externalReference String
+ evidenceText String
+ evidenceHash String
+ verificationStatus String @default("UNVERIFIED")
+ recordedById String
+ recordedAt DateTime @default(now())
+ @@index([organizationId,invoiceId,recordedAt])
+}
+
+model GrantClientPortalInvitation {
+ id String @id @default(cuid())
+ organizationId String
+ organization GrantOrganization @relation(fields:[organizationId],references:[id])
+ projectId String
+ project GrantProject @relation(fields:[projectId,organizationId],references:[id,organizationId])
+ clientId String
+ client GrantBillingClient @relation(fields:[clientId,organizationId],references:[id,organizationId])
+ quoteId String
+ quote GrantEngagementQuote @relation(fields:[quoteId,organizationId,projectId,clientId],references:[id,organizationId,projectId,clientId])
+ recipientEmail String
+ quoteHash String
+ tokenHash String @unique
+ expiresAt DateTime
+ acceptedAt DateTime?
+ accessTokenHash String? @unique
+ accessExpiresAt DateTime?
+ revokedAt DateTime?
+ createdById String
+ createdAt DateTime @default(now())
+ events GrantClientPortalEvent[]
+ @@unique([id,organizationId])
+ @@index([organizationId,projectId,createdAt])
+}
+
+model GrantClientPortalEvent {
+ id String @id @default(cuid())
+ organizationId String
+ invitationId String
+ invitation GrantClientPortalInvitation @relation(fields:[invitationId,organizationId],references:[id,organizationId])
+ eventType String
+ actorId String?
+ clientName String?
+ clientEmail String?
+ statement String
+ evidenceHash String
+ createdAt DateTime @default(now())
+ @@index([organizationId,invitationId,createdAt])
 }
 model GrantProjectAccess {
  id String @id @default(cuid())

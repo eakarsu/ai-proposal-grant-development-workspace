@@ -20,6 +20,7 @@ type Draft = {
     issues: string[];
     limitations: string[];
     citations: { sourceId: string; chunkId: string; quote: string }[];
+    requirements?: { text: string; citations: { sourceId: string; chunkId: string; quote: string }[] }[];
   } | null;
   sourceSnapshot: unknown;
 };
@@ -150,6 +151,7 @@ export default function GrantAiWorkspace({
                 ["DRAFT_SECTION", "Draft a section"],
                 ["REWRITE_SECTION", "Rewrite a section"],
                 ["REQUIREMENT_REVIEW", "Review requirements"],
+                ["COMPLIANCE_MATRIX", "Extract cited compliance matrix"],
                 ["BUDGET_REVIEW", "Review budget"],
                 ["PROPOSAL_REVIEW", "Review proposal"],
               ].map(([id, label]) => (
@@ -268,6 +270,22 @@ export default function GrantAiWorkspace({
                   ),
                 )}
               </ul>
+              {d.task === "COMPLIANCE_MATRIX" && d.output.requirements && (
+                <div className="space-y-2">
+                  <h4 className="font-semibold">Candidate requirements for human review</h4>
+                  <p>Applying adds these as unreviewed requirements. A reviewer must map them to sections and decide whether they are satisfied.</p>
+                  <ol className="list-decimal pl-5">
+                    {d.output.requirements.map((requirement, index) => (
+                      <li key={index} className="mb-2">
+                        {requirement.text}
+                        <span className="block text-sm text-slate-600">
+                          {requirement.citations.map(citation => `${citation.sourceId} / ${citation.chunkId}: “${citation.quote}”`).join("; ")}
+                        </span>
+                      </li>
+                    ))}
+                  </ol>
+                </div>
+              )}
               <details>
                 <summary>Exact quoted citations</summary>
                 {d.output.citations.map((c, i) => (
@@ -321,6 +339,18 @@ export default function GrantAiWorkspace({
                       }}
                     >
                       Apply reviewed section
+                    </button>
+                  )}
+                  {d.task === "COMPLIANCE_MATRIX" && (
+                    <button
+                      className={button}
+                      disabled={busy || dirty || notes.trim().length < 5 || d.baseVersion !== version}
+                      onClick={() => {
+                        if (window.confirm("Add these cited candidate requirements as unreviewed items?"))
+                          void send({ id: d.id, action: "APPLY", expectedVersion: version, notes, reviewConfirmed: true }, "PATCH");
+                      }}
+                    >
+                      Add reviewed candidate requirements
                     </button>
                   )}
                   <button

@@ -1,0 +1,9 @@
+# Client engagement portal
+
+An organization manager creates a billing client and an engagement quote for one grant project. Another manager approves the quote. In the project's **Client & billing** tab, a manager can then create a seven-day, single-use portal invitation for the billing email on that quote. The invitation link is shown once for manual, private handoff; the app does not send email.
+
+The recipient opens the link, reviews the exact approved quote, enters their full name and the invited billing email, and checks an explicit acceptance statement. Acceptance consumes the invitation. It creates an append-only evidence event with the name, email, quote fingerprint and statement, then returns a separate private read-only access link. The access link lasts up to 30 days while the approved quote remains current. A manager can revoke either a pending invitation or accepted access. Neither link grants organization membership or editing rights. The database stores SHA-256 token hashes, not raw tokens.
+
+The read-only page shows the accepted quote, an internal invoice candidate if one exists, and limited proposal metadata only when the current proposal has a matching approval or frozen package. It does not expose drafts, source files, staff comments, or payment evidence text. Invoice candidates and operator-entered status reports do not prove invoice delivery or settlement.
+
+**Limits:** Possession of the private link and a matching self-entered email are the only recipient checks. Email ownership and legal identity are not verified. The application does not authenticate delivery, create a legally assured electronic signature, submit to a funder, issue an invoice through a provider, or reconcile a settled payment. A new approved quote version invalidates access to an earlier accepted quote; the manager must revoke and invite against the current version. A lost access link requires a fresh invitation. Keep both links private.
